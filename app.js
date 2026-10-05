@@ -53,25 +53,22 @@ function decision(s){
   return {label,kind,score,reasons:reasons.slice(0,3)};
 }
 function autoComment(s){
-  const d=Number.isFinite(s.dayChangePct)?s.dayChangePct:null,f=s.fundamentals||{},news=s.news||[];
-  const pos=news.filter(n=>n.impact==="positive").length,neg=news.filter(n=>n.impact==="negative").length;
-  let score=50,evidence=[];
-  if(d!==null){score+=Math.max(-10,Math.min(10,d*2));evidence.push(`前日比 ${d>=0?"+":""}${d.toFixed(1)}%`);}
-  if(Number.isFinite(f.revenueGrowth)){score+=f.revenueGrowth>0.1?10:f.revenueGrowth<0?-10:2;evidence.push(`売上成長 ${(f.revenueGrowth*100).toFixed(1)}%`);}
-  if(Number.isFinite(f.earningsGrowth)){score+=f.earningsGrowth>0.1?10:f.earningsGrowth<0?-10:2;evidence.push(`利益成長 ${(f.earningsGrowth*100).toFixed(1)}%`);}
-  if(Number.isFinite(f.profitMargin)){score+=f.profitMargin>0.15?7:f.profitMargin<0?-8:2;evidence.push(`利益率 ${(f.profitMargin*100).toFixed(1)}%`);}
-  if(Number.isFinite(f.trailingPE)){if(f.trailingPE>60)score-=8;else if(f.trailingPE>0&&f.trailingPE<20)score+=5;evidence.push(`PER ${f.trailingPE.toFixed(1)}倍`);}
-  if(pos>neg){score+=8;evidence.push(`好材料ニュース ${pos}件`);}else if(neg>pos){score-=10;evidence.push(`悪材料ニュース ${neg}件`);}
-  if(Number.isFinite(f.targetMeanPriceJPY)&&s.currentPriceJPY){const gap=(f.targetMeanPriceJPY/s.currentPriceJPY-1)*100;score+=Math.max(-8,Math.min(8,gap/5));evidence.push(`目標株価乖離 ${gap>=0?"+":""}${gap.toFixed(0)}%`);}
-  score=Math.max(0,Math.min(100,Math.round(score)));
-  const view=score>=65?"強気寄り":score<42?"弱気寄り":"中立";
-  const short=d===null?"短期データは不足。ニュースと次の株価更新を優先。":d>=2?"1〜4週は上向きモメンタム。ただし急伸後の反落には注意。":d<=-2?"1〜4週は下向き圧力が優勢。悪材料の継続性を確認。":"1〜4週は方向感が弱く、次の材料で動きやすい局面。";
-  const growth=Number.isFinite(f.revenueGrowth)?f.revenueGrowth:null,earn=Number.isFinite(f.earningsGrowth)?f.earningsGrowth:null;
-  const base=(growth!==null||earn!==null)?`3〜12か月の基本シナリオは${score>=60?"成長継続なら上値余地を維持":"業績確認を優先"}。売上・利益の伸びが次の軸。`:"3〜12か月は業績データ不足のため、決算・会社予想の更新が最重要。";
-  const bull=`強気：${growth!==null&&growth>0.1?"売上成長が続き": "業績が市場予想を上回り"}、好材料が増えれば評価切り上げ。`;
-  const bear=`弱気：${neg?"悪材料が継続し、":"業績予想が悪化し、"}成長鈍化やバリュエーション調整が重なると下押し。`;
-  const change=`見通し変更条件：次回決算の売上・利益成長、会社予想、重要ニュース${Number.isFinite(f.trailingPE)?"、PER水準":""}。`;
-  return {view,score,short,base,bull,bear,change,evidence:evidence.slice(0,4)};
+ const d=Number.isFinite(s.dayChangePct)?s.dayChangePct:null,f=s.fundamentals||{},news=s.news||[],name=displayName(s),sector=SECTORS[s.symbol]||"事業";
+ const pos=news.filter(n=>n.impact==="positive"),neg=news.filter(n=>n.impact==="negative");let score=50,evidence=[],drivers=[];
+ if(Number.isFinite(f.revenueGrowth)){score+=f.revenueGrowth>0.1?12:f.revenueGrowth<0?-12:3;evidence.push(`売上 ${f.revenueGrowth>=0?"+":""}${(f.revenueGrowth*100).toFixed(1)}%`);drivers.push(f.revenueGrowth>0?`売上が前年比${(f.revenueGrowth*100).toFixed(1)}%伸びている`:`売上が前年比${Math.abs(f.revenueGrowth*100).toFixed(1)}%減っている`)}
+ if(Number.isFinite(f.earningsGrowth)){score+=f.earningsGrowth>0.1?12:f.earningsGrowth<0?-12:2;evidence.push(`利益 ${f.earningsGrowth>=0?"+":""}${(f.earningsGrowth*100).toFixed(1)}%`);drivers.push(f.earningsGrowth>0?"利益成長が売上の伸びを支えている":"利益成長が弱く採算の確認が必要")}
+ if(Number.isFinite(f.profitMargin)){score+=f.profitMargin>0.15?7:f.profitMargin<0?-10:1;evidence.push(`利益率 ${(f.profitMargin*100).toFixed(1)}%`)}
+ const pe=Number.isFinite(f.forwardPE)?f.forwardPE:f.trailingPE;if(Number.isFinite(pe)){score+=pe<15?6:pe>45?-8:0;evidence.push(`${Number.isFinite(f.forwardPE)?"予想":""}PER ${pe.toFixed(1)}倍`);drivers.push(pe>45?"成長期待を織り込んだ高い評価が下落リスク":"バリュエーションは極端な割高圏ではない")}
+ if(d!==null){score+=Math.max(-7,Math.min(7,d*1.4));evidence.push(`前日比 ${d>=0?"+":""}${d.toFixed(1)}%`)}
+ if(pos.length>neg.length){score+=8;drivers.push(`直近ニュースでは「${pos[0].title}」がプラス材料`)}else if(neg.length>pos.length){score-=10;drivers.push(`直近ニュースでは「${neg[0].title}」がリスク材料`)}
+ score=Math.max(0,Math.min(100,Math.round(score)));const view=score>=67?"強気寄り":score<40?"慎重":"中立";
+ const confidence=[f.revenueGrowth,f.earningsGrowth,f.profitMargin,pe,d].filter(Number.isFinite).length+(news.length?1:0),quality=confidence>=5?"高":confidence>=3?"中":"低";
+ const short=d===null?`${name}は短期価格データが不足。ニュース材料を優先して確認。`:`${name}の短期は前日比${d>=0?"+":""}${d.toFixed(1)}%。${Math.abs(d)>=3?"値動きが大きいため材料の継続性を確認したい。":"価格だけでは方向を決めにくく、次の材料待ち。"}`;
+ const base=`${name}の中期は${drivers.slice(0,2).join("一方、")||sector+"の業績推移が中心材料"}。現在のデータでは${view}を基本シナリオとする。`;
+ const bull=`${pos.length?pos[0].title+"のような好材料が業績に反映され":"売上・利益が市場予想を上回り"}、${sector}の成長と採算改善が同時に進めば上振れ。`;
+ const bear=`${neg.length?neg[0].title+"の影響が長引くか、":"売上または利益成長が鈍化し、"}${Number.isFinite(pe)&&pe>30?"高いPERの修正が起きる":"採算が悪化する"}場合は下振れ。`;
+ const change=`次の決算で売上・利益の方向が現在の想定と逆転する、または重要ニュースの材料方向が変われば見通しを再評価。`;
+ return {view,score,short,base,bull,bear,change,evidence:evidence.slice(0,5),quality};
 }
 function focusScore(s){
   let score=0,reasons=[];const d=Number.isFinite(s.dayChangePct)?s.dayChangePct:0,dec=decision(s),news=s.news||[];
@@ -100,9 +97,9 @@ function renderDetail(i){
   const s=stocks[i];if(!s)return;const c=autoComment(s),dec=decision(s),f=s.fundamentals||{};
   $("#detailTitle").textContent=displayName(s);$("#detailPrice").textContent=s.currentPriceJPY?yen(s.currentPriceJPY):"—";
   $("#detailBody").innerHTML=`
-    <div class="decision ${dec.kind}"><div><span>総合判定</span><strong>${escapeHtml(dec.label)}</strong></div><b>${dec.score===null?"—":dec.score+"点"}</b><p>${dec.reasons.map(escapeHtml).join(" ・ ")}</p></div>
+    <div class="decision ${dec.kind}"><div><span>総合判定</span><strong>${escapeHtml(dec.label)}</strong></div><p>${dec.reasons.map(escapeHtml).join(" ・ ")}</p></div>
     <section class="detail-section"><h3>企業指標</h3><div class="fundamentals detail-metrics"><div><span>PER</span><strong>${Number.isFinite(f.trailingPE)?f.trailingPE.toFixed(1)+"倍":"—"}</strong></div><div><span>予想PER</span><strong>${Number.isFinite(f.forwardPE)?f.forwardPE.toFixed(1)+"倍":"—"}</strong></div><div><span>売上成長</span><strong>${Number.isFinite(f.revenueGrowth)?(f.revenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益率</span><strong>${Number.isFinite(f.profitMargin)?(f.profitMargin*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益成長</span><strong>${Number.isFinite(f.earningsGrowth)?(f.earningsGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>目標株価</span><strong>${Number.isFinite(f.targetMeanPriceJPY)?yen(f.targetMeanPriceJPY):"—"}</strong></div></div></section>
-    <section class="detail-section"><h3>AI見通し</h3><div class="ai outlook"><div class="ai-head"><span class="badge">${escapeHtml(c.view)}</span><span class="score">${c.score}点</span></div><div class="evidence">${c.evidence.length?c.evidence.map(x=>`<span>${escapeHtml(x)}</span>`).join(""):'<span>取得データ待ち</span>'}</div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>基本</b><span>${escapeHtml(c.base)}</span></div><div><b>強気</b><span>${escapeHtml(c.bull)}</span></div><div><b>弱気</b><span>${escapeHtml(c.bear)}</span></div><div><b>変更条件</b><span>${escapeHtml(c.change)}</span></div></div></div></section>
+    <section class="detail-section"><h3>AI見通し</h3><div class="ai outlook"><div class="ai-head"><span class="badge">${escapeHtml(c.view)}</span><span class="badge">データ信頼度 ${c.quality}</span></div><div class="evidence">${c.evidence.length?c.evidence.map(x=>`<span>${escapeHtml(x)}</span>`).join(""):'<span>取得データ待ち</span>'}</div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>基本</b><span>${escapeHtml(c.base)}</span></div><div><b>強気</b><span>${escapeHtml(c.bull)}</span></div><div><b>弱気</b><span>${escapeHtml(c.bear)}</span></div><div><b>変更条件</b><span>${escapeHtml(c.change)}</span></div></div></div></section>
     <section class="detail-section"><h3>最新ニュース</h3>${s.news?.length?`<div class="news-box">${s.news.slice(0,5).map(n=>`<a class="news-item" href="${escapeHtml(n.url||"#")}" target="_blank" rel="noopener"><div><span class="impact ${n.impact}">${n.impact==="positive"?"好材料":n.impact==="negative"?"悪材料":"中立"}</span><small>${escapeHtml(n.publisher||"News")}</small></div><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.reason)}</p></a>`).join("")}</div>`:'<p class="muted">ニュースデータ待ち</p>'}</section>`;
   $("#homeView").hidden=true;$("#detailView").hidden=false;window.scrollTo(0,0);
 }
@@ -111,8 +108,8 @@ function render(){
   $("#list").innerHTML=shown.length?shown.map(s=>{
     const i=stocks.indexOf(s),p=pnlPct(s),cls=p===null?"":p>=0?"up":"down",cost=s.shares?s.purchasePriceJPY*s.shares:null,value=s.shares&&s.currentPriceJPY?s.currentPriceJPY*s.shares:null,pl=cost!==null&&value!==null?value-cost:null,dec=decision(s),c=autoComment(s);
     return `<article class="card compact-card" data-detail="${i}"><div class="top"><div><div class="name">${escapeHtml(displayName(s))}</div><div class="market">${s.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"}</div></div><div class="price">${s.currentPriceJPY?yen(s.currentPriceJPY):"—"}<div class="price-label">現在株価</div></div></div>
-    ${s.shares?`<div class="pnl-row"><span>含み損益</span><strong class="${cls}">${pl===null?"—":`${pl>=0?"+":""}${yen(pl)}　${p>=0?"+":""}${p.toFixed(1)}%`}</strong></div>`:""}
-    <div class="compact-decision"><span class="${dec.kind}">${escapeHtml(dec.label)} ${dec.score===null?"":dec.score+"点"}</span><p>AI見通し：${escapeHtml(c.view)} ・ ${escapeHtml(c.short)}</p></div>
+    ${s.shares?`<div class="holding-grid compact-holding"><div><span>購入価格</span><strong>${yen(s.purchasePriceJPY)}</strong></div><div><span>保有株数</span><strong>${num(s.shares)}株</strong></div></div><div class="pnl-row"><span>含み損益</span><strong class="${cls}">${pl===null?"—":`${pl>=0?"+":""}${yen(pl)}　${p>=0?"+":""}${p.toFixed(1)}%`}</strong></div>`:""}
+    <div class="compact-decision"><span class="${dec.kind}">${escapeHtml(dec.label)}</span></div>
     <div class="bottom"><div class="small">${s.updatedAt?`更新 ${new Date(s.updatedAt).toLocaleString("ja-JP")}`:""}</div><div class="card-actions"><button class="edit" data-edit="${i}">編集</button><button class="delete" data-del="${i}">削除</button><span class="detail-arrow">分析を見る ›</span></div></div></article>`;
   }).join(""):`<div class="empty">保有銘柄を追加してポートフォリオ管理を始めよう。</div>`;
   const t=portfolio();$("#totalCost").textContent=yen(t.cost);$("#totalValue").textContent=yen(t.value);$("#totalPnl").textContent=(t.pnl>=0?"+":"")+yen(t.pnl);$("#totalPnl").className=t.pnl>=0?"up":"down";$("#totalPnlPct").textContent=t.pct===null?"—":`${t.pct>=0?"+":""}${t.pct.toFixed(1)}%`;$("#totalPnlPct").className=t.pct===null?"":t.pct>=0?"up":"down";renderTodayFocus();renderAllocation();renderRecommendations();

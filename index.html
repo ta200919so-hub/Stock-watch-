@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=3.8" />
+  <link rel="stylesheet" href="style.css?v=3.9" />
   <title>Stock Watch AI</title>
 </head>
 <body>
@@ -29,10 +29,7 @@
       <div class="metric"><span>現在評価額</span><strong id="totalValue">¥0</strong></div>
       <div class="metric"><span>トータル損益</span><strong id="totalPnl">¥0</strong><small id="totalPnlPct">—</small></div>
     </section>
-
-    <section class="focus-panel"><div class="section-head"><div><p class="eyebrow">TODAY FOCUS</p><h2>今日見るべき銘柄</h2></div><span class="muted">TOP 3</span></div><div id="todayFocus" class="today-focus"></div></section>
-
-    <section class="portfolio-panel"><div class="section-head"><div><p class="eyebrow">ALLOCATION</p><h2>ポートフォリオ</h2></div><span id="holdingCount" class="muted"></span></div><div class="allocation"><div id="donut" class="donut"><div class="donut-center"><strong id="donutTotal">¥0</strong><span>評価額</span></div></div><div id="legend" class="legend"></div></div><div id="concentration" class="insight">保有データが揃うと構成比を分析します。</div></section>
+<section class="portfolio-panel"><div class="section-head"><div><p class="eyebrow">ALLOCATION</p><h2>ポートフォリオ</h2></div><span id="holdingCount" class="muted"></span></div><div class="allocation"><div id="donut" class="donut"><div class="donut-center"><strong id="donutTotal">¥0</strong><span>評価額</span></div></div><div id="legend" class="legend"></div></div><div id="concentration" class="insight">保有データが揃うと構成比を分析します。</div></section>
 
     <section class="recommend-panel"><div class="section-head"><div><p class="eyebrow">AI WATCHLIST</p><h2>AIおすすめ候補</h2></div><span class="muted">分散重視</span></div><div id="recommendations" class="recommendations"></div></section>
 
@@ -85,6 +82,6 @@
 
   <dialog id="editDialog"><form id="editForm"><div class="dialog-head"><h2>保有情報を編集</h2><button type="button" id="closeEdit" class="icon-btn">×</button></div><input id="editIndex" type="hidden" /><div id="editStockName" class="edit-stock-name"></div><label>買った時の1株価格（円）<input id="editPurchasePrice" type="number" min="0.01" step="0.01" required inputmode="decimal" /></label><label>保有株数<input id="editShares" type="number" min="0.0001" step="0.0001" required inputmode="decimal" /></label><label>購入日（任意）<input id="editPurchaseDate" type="date" /></label><label>メモ（任意）<input id="editMemo" /></label><button class="primary" type="submit">変更を保存</button></form></dialog>
 
-  <script src="app.js?v=3.8"></script>
+  <script src="app.js?v=3.9"></script>
 </body>
 </html>

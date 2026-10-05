@@ -26,6 +26,25 @@ const JA_NAMES={
   "8035.T":"東京エレクトロン","7974.T":"任天堂","2802.T":"味の素","8001.T":"伊藤忠商事","7011.T":"三菱重工業","7012.T":"川崎重工業","7701.T":"島津製作所","5332.T":"TOTO","7203.T":"トヨタ自動車","6758.T":"ソニーグループ","6501.T":"日立製作所","6702.T":"富士通","6502.T":"東芝"
 };
 function displayName(s){return JA_NAMES[s.symbol]||s.name||s.symbol||"銘柄"}
+const COMPANY_THEMES={
+ "7012.T":["防衛・航空宇宙の受注","エネルギー・水素関連","大型案件の採算と受注残"],
+ "7011.T":["防衛予算と受注残","GTCC・エネルギー需要","航空宇宙・原子力"],
+ "8035.T":["AI/HBM向け半導体投資","先端ロジック・メモリ設備投資","中国向け規制と需要"],
+ "5332.T":["半導体向け静電チャック","住宅設備需要","セラミック事業の採算"],
+ "7701.T":["分析・計測機器需要","半導体・製薬向け設備投資","海外売上と利益率"],
+ "7974.T":["Switchプラットフォーム","マリオ・ポケモン等IP収益","ハード移行期の販売動向"],
+ "2802.T":["ABFなど電子材料","食品の価格改定","海外成長と利益率"],
+ "8001.T":["非資源事業の利益成長","消費関連・ファミリーマート","株主還元と資本効率"],
+ "AMAT":["AI/HBM向け装置需要","先端ロジック・メモリ投資","中国規制とサービス収益"],
+ "NVDA":["AIアクセラレータ需要","次世代GPU供給","データセンター投資と競争"],
+ "QCOM":["スマホ半導体需要","車載・IoT成長","エッジAIとライセンス収益"],
+ "7203.T":["HV・EV販売構成","為替と北米収益","自動運転・ソフトウェア投資"],
+ "6758.T":["ゲーム・音楽・映画IP","イメージセンサー需要","PlayStation収益"],
+ "6501.T":["デジタル・Lumada","送配電・エネルギー投資","鉄道・社会インフラ"],
+ "6702.T":["AI・データセンター","MONAKAプロセッサ","国内DX・モダナイゼーション"]
+};
+function companyThemes(s){return COMPANY_THEMES[s.symbol]||[`${SECTORS[s.symbol]||"主力事業"}の需要`,"次回決算の売上・利益","会社予想と重要ニュース"]}
+
 const SECTORS={"NVDA":"半導体","AMAT":"半導体","QCOM":"半導体","AVGO":"半導体","8035.T":"半導体","7974.T":"ゲーム","2802.T":"食品","8001.T":"商社","7011.T":"重工","7012.T":"重工","7701.T":"精密機器","5332.T":"住宅設備","7203.T":"自動車","6758.T":"エンタメ","6501.T":"IT・インフラ","6702.T":"IT","AAPL":"テクノロジー","MSFT":"テクノロジー","GOOGL":"インターネット","AMZN":"消費・クラウド","META":"インターネット","TSLA":"自動車"};
 function stockScore(s){
   const p=pnlPct(s),d=Number.isFinite(s.dayChangePct)?s.dayChangePct:0;
@@ -64,9 +83,9 @@ function autoComment(s){
  score=Math.max(0,Math.min(100,Math.round(score)));const view=score>=67?"強気寄り":score<40?"慎重":"中立";
  const confidence=[f.revenueGrowth,f.earningsGrowth,f.profitMargin,pe,d].filter(Number.isFinite).length+(news.length?1:0),quality=confidence>=5?"高":confidence>=3?"中":"低";
  const short=d===null?`${name}は短期価格データが不足。ニュース材料を優先して確認。`:`${name}の短期は前日比${d>=0?"+":""}${d.toFixed(1)}%。${Math.abs(d)>=3?"値動きが大きいため材料の継続性を確認したい。":"価格だけでは方向を決めにくく、次の材料待ち。"}`;
- const base=`${name}の中期は${drivers.slice(0,2).join("一方、")||sector+"の業績推移が中心材料"}。現在のデータでは${view}を基本シナリオとする。`;
- const bull=`${pos.length?pos[0].title+"のような好材料が業績に反映され":"売上・利益が市場予想を上回り"}、${sector}の成長と採算改善が同時に進めば上振れ。`;
- const bear=`${neg.length?neg[0].title+"の影響が長引くか、":"売上または利益成長が鈍化し、"}${Number.isFinite(pe)&&pe>30?"高いPERの修正が起きる":"採算が悪化する"}場合は下振れ。`;
+ const themes=companyThemes(s); const base=`${name}は「${themes[0]}」「${themes[1]}」を中心に確認。${drivers.slice(0,2).join("一方、")||sector+"の業績推移が中心材料"}。現在は${view}。`;
+ const bull=`${themes[0]}が想定以上に伸び、${pos.length?pos[0].title+"のような好材料が業績に反映され":"売上・利益が市場予想を上回れば"}上振れ余地。`;
+ const bear=`${themes[2]}に悪化が見られ、${neg.length?neg[0].title+"の影響が長引くか、":"売上または利益成長が鈍化し、"}${Number.isFinite(pe)&&pe>30?"高いPERの修正が起きる":"採算が悪化する"}場合は下振れ。`;
  const change=`次の決算で売上・利益の方向が現在の想定と逆転する、または重要ニュースの材料方向が変われば見通しを再評価。`;
  return {view,score,short,base,bull,bear,change,evidence:evidence.slice(0,5),quality};
 }
@@ -99,7 +118,7 @@ function renderDetail(i){
   $("#detailBody").innerHTML=`
     <div class="decision ${dec.kind}"><div><span>総合判定</span><strong>${escapeHtml(dec.label)}</strong></div><p>${dec.reasons.map(escapeHtml).join(" ・ ")}</p></div>
     <section class="detail-section"><h3>企業指標</h3><div class="fundamentals detail-metrics"><div><span>PER</span><strong>${Number.isFinite(f.trailingPE)?f.trailingPE.toFixed(1)+"倍":"—"}</strong></div><div><span>予想PER</span><strong>${Number.isFinite(f.forwardPE)?f.forwardPE.toFixed(1)+"倍":"—"}</strong></div><div><span>売上成長</span><strong>${Number.isFinite(f.revenueGrowth)?(f.revenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益率</span><strong>${Number.isFinite(f.profitMargin)?(f.profitMargin*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益成長</span><strong>${Number.isFinite(f.earningsGrowth)?(f.earningsGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>目標株価</span><strong>${Number.isFinite(f.targetMeanPriceJPY)?yen(f.targetMeanPriceJPY):"—"}</strong></div></div></section>
-    <section class="detail-section"><h3>AI見通し</h3><div class="ai outlook"><div class="ai-head"><span class="badge">${escapeHtml(c.view)}</span><span class="badge">データ信頼度 ${c.quality}</span></div><div class="evidence">${c.evidence.length?c.evidence.map(x=>`<span>${escapeHtml(x)}</span>`).join(""):'<span>取得データ待ち</span>'}</div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>基本</b><span>${escapeHtml(c.base)}</span></div><div><b>強気</b><span>${escapeHtml(c.bull)}</span></div><div><b>弱気</b><span>${escapeHtml(c.bear)}</span></div><div><b>変更条件</b><span>${escapeHtml(c.change)}</span></div></div></div></section>
+    <section class="detail-section"><h3>注目テーマ</h3><div class="evidence">${companyThemes(s).map(x=>`<span>${escapeHtml(x)}</span>`).join("")}</div></section><section class="detail-section"><h3>AI見通し</h3><div class="ai outlook"><div class="ai-head"><span class="badge">${escapeHtml(c.view)}</span><span class="badge">データ信頼度 ${c.quality}</span></div><div class="evidence">${c.evidence.length?c.evidence.map(x=>`<span>${escapeHtml(x)}</span>`).join(""):'<span>取得データ待ち</span>'}</div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>基本</b><span>${escapeHtml(c.base)}</span></div><div><b>強気</b><span>${escapeHtml(c.bull)}</span></div><div><b>弱気</b><span>${escapeHtml(c.bear)}</span></div><div><b>変更条件</b><span>${escapeHtml(c.change)}</span></div></div></div></section>
     <section class="detail-section"><h3>最新ニュース</h3>${s.news?.length?`<div class="news-box">${s.news.slice(0,5).map(n=>`<a class="news-item" href="${escapeHtml(n.url||"#")}" target="_blank" rel="noopener"><div><span class="impact ${n.impact}">${n.impact==="positive"?"好材料":n.impact==="negative"?"悪材料":"中立"}</span><small>${escapeHtml(n.publisher||"News")}</small></div><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.reason)}</p></a>`).join("")}</div>`:'<p class="muted">ニュースデータ待ち</p>'}</section>`;
   $("#homeView").hidden=true;$("#detailView").hidden=false;window.scrollTo(0,0);
 }

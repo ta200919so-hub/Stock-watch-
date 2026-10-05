@@ -62,6 +62,23 @@ function autoComment(s){
   const watch="総合判定とニュース、企業指標を合わせて確認。単一の点数だけで売買判断しないこと。";
   return {view,short,medium,risk,watch};
 }
+function focusScore(s){
+  let score=0,reasons=[];const d=Number.isFinite(s.dayChangePct)?s.dayChangePct:0,dec=decision(s),news=s.news||[];
+  const total=stocks.reduce((a,x)=>a+(x.shares||0)*(x.currentPriceJPY||0),0),value=(s.shares||0)*(s.currentPriceJPY||0),weight=total?value/total:0;
+  if(Math.abs(d)>=3){score+=25+Math.min(15,Math.abs(d)*2);reasons.push(`前日比 ${d>=0?"+":""}${d.toFixed(1)}% と値動き大`);}
+  const neg=news.filter(n=>n.impact==="negative").length,pos=news.filter(n=>n.impact==="positive").length;
+  if(neg){score+=20+neg*5;reasons.push("悪材料ニュースを確認");}else if(pos){score+=10+pos*3;reasons.push("好材料ニュースあり");}
+  if(dec.kind==="negative"){score+=20;reasons.push("総合判定が注意");}
+  if(weight>=0.25){score+=Math.round(weight*30);reasons.push(`保有比率 ${(weight*100).toFixed(0)}%`);}
+  const p=pnlPct(s);if(p!==null&&Math.abs(p)>=20){score+=10;reasons.push(`買値比 ${p>=0?"+":""}${p.toFixed(0)}%`);}
+  if(!reasons.length)reasons.push("大きな警戒材料は少なめ");
+  return {score,reasons:reasons.slice(0,2),decision:dec};
+}
+function renderTodayFocus(){
+  const box=$("#todayFocus");if(!box)return;
+  const items=stocks.filter(s=>s.shares>0&&s.currentPriceJPY>0).map(s=>({s,...focusScore(s)})).sort((a,b)=>b.score-a.score).slice(0,3);
+  box.innerHTML=items.length?items.map((x,i)=>`<div class="focus-card"><b>#${i+1}</b><div><strong>${escapeHtml(displayName(x.s))}</strong><p>${x.reasons.map(escapeHtml).join(" ・ ")}</p></div><span class="${x.decision.kind}">${escapeHtml(x.decision.label)}</span></div>`).join(""):'<div class="muted">保有銘柄を登録・更新すると表示されます。</div>';
+}
 function portfolio(){
   const held=stocks.filter(s=>s.shares>0&&s.purchasePriceJPY>0);
   const cost=held.reduce((a,s)=>a+s.purchasePriceJPY*s.shares,0);
@@ -104,6 +121,7 @@ function render(){
   $("#totalPnl").className=t.pnl>=0?"up":"down";
   $("#totalPnlPct").textContent=t.pct===null?"—":`${t.pct>=0?"+":""}${t.pct.toFixed(1)}%`;
   $("#totalPnlPct").className=t.pct===null?"":t.pct>=0?"up":"down";
+  renderTodayFocus();
   renderAllocation();
   renderRecommendations();
 }

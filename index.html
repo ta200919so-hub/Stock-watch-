@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=4.2.3" />
+  <link rel="stylesheet" href="style.css?v=4.3" />
   <title>Stock Watch AI</title>
 </head>
 <body>
@@ -49,9 +49,10 @@
       <strong>株価・AI見通しについて</strong>
       <p>株価は公開マーケットデータから取得し、米国株はUSD/JPYで円換算します。取得元の都合で遅延・停止する場合があります。AI見通しは価格データをもとにした参考情報で、将来の株価を保証するものではなく、投資助言ではありません。</p>
     </section>
-  </main>
-
-</div><section id="detailView" class="detail-view" hidden><header class="detail-header"><button id="backHome" class="back-btn">‹ 戻る</button><div><p class="eyebrow">STOCK ANALYSIS</p><h2 id="detailTitle">銘柄分析</h2></div><strong id="detailPrice">—</strong></header><div id="detailBody"></div></section>
+  </main></div>
+<section id="searchView" class="detail-view" hidden><header class="detail-header"><button id="searchBack" class="back-btn">‹ 戻る</button><div><p class="eyebrow">STOCK SEARCH</p><h2>銘柄検索</h2></div></header><section class="detail-section"><label>企業名・証券コード・ティッカー<input id="globalSearch" autocomplete="off" placeholder="例：トヨタ / 7203 / NVIDIA / NVDA" /></label><div id="globalSuggestions" class="suggestions search-results"></div></section></section>
+<button id="openSearch" class="search-fab" aria-label="銘柄検索">⌕ 銘柄検索</button>
+<section id="detailView" class="detail-view" hidden><header class="detail-header"><button id="backHome" class="back-btn">‹ 戻る</button><div><p class="eyebrow">STOCK ANALYSIS</p><h2 id="detailTitle">銘柄分析</h2></div><strong id="detailPrice">—</strong></header><div id="detailBody"></div></section>
 
   <dialog id="addDialog">
     <form id="addForm">
@@ -82,6 +83,6 @@
 
   <dialog id="editDialog"><form id="editForm"><div class="dialog-head"><h2>保有情報を編集</h2><button type="button" id="closeEdit" class="icon-btn">×</button></div><input id="editIndex" type="hidden" /><div id="editStockName" class="edit-stock-name"></div><label>買った時の1株価格（円）<input id="editPurchasePrice" type="number" min="0.01" step="0.01" required inputmode="decimal" /></label><label>保有株数<input id="editShares" type="number" min="0.0001" step="0.0001" required inputmode="decimal" /></label><label>購入日（任意）<input id="editPurchaseDate" type="date" /></label><label>メモ（任意）<input id="editMemo" /></label><button class="primary" type="submit">変更を保存</button></form></dialog>
 
-  <script src="app.js?v=4.2.3"></script>
+  <script src="app.js?v=4.3"></script>
 </body>
 </html>

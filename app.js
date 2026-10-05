@@ -230,9 +230,30 @@ $("#list").addEventListener("click",e=>{
   const b=e.target.closest("[data-del]");if(b){if(confirm("この銘柄を削除しますか？")){stocks.splice(Number(b.dataset.del),1);save();render()}return}
   const card=e.target.closest("[data-detail]");if(card)renderDetail(Number(card.dataset.detail));
 });
-$("#backHome").addEventListener("click",()=>{$("#detailView").hidden=true;$("#homeView").hidden=false;window.scrollTo(0,0)});
+$("#backHome").addEventListener("click",()=>{$("#detailView").hidden=true;const sv=$("#searchView");if(sv&&$("#globalSearch")?.value){sv.hidden=false}else{$("#homeView").hidden=false}window.scrollTo(0,0)});
 $("#closeEdit").addEventListener("click",()=>$("#editDialog").close());
 $("#editForm").addEventListener("submit",e=>{e.preventDefault();const i=Number($("#editIndex").value),s=stocks[i];if(!s)return;s.purchasePriceJPY=Number($("#editPurchasePrice").value);s.shares=Number($("#editShares").value);s.purchaseDate=$("#editPurchaseDate").value;s.memo=$("#editMemo").value.trim();save();render();$("#editDialog").close();status("保有情報を更新しました。","ok");setTimeout(()=>status(""),2000)});
+
+let globalSearchTimer=null;
+function showSearch(){const v=$("#searchView");if(!v)return;$("#homeView").hidden=true;$("#detailView").hidden=true;v.hidden=false;window.scrollTo(0,0);setTimeout(()=>$("#globalSearch")?.focus(),50)}
+function closeSearch(){const v=$("#searchView");if(v)v.hidden=true;$("#detailView").hidden=true;$("#homeView").hidden=false;window.scrollTo(0,0)}
+async function globalSearch(){
+ const input=$("#globalSearch"),box=$("#globalSuggestions");if(!input||!box)return;const q=input.value.trim();if(!q){box.innerHTML="";return}
+ let all=[];
+ for(const market of ["JP","US"]){try{const r=await fetch(`/api/search?q=${encodeURIComponent(q)}&market=${market}`);if(r.ok){const d=await r.json();all.push(...(d.results||[]).map(x=>({...x,market})))}}catch{}}
+ const seen=new Set();all=all.filter(x=>x.symbol&&!seen.has(x.symbol)&&(seen.add(x.symbol),true)).slice(0,10);
+ box.innerHTML=all.length?all.map(x=>`<button type="button" class="suggestion global-result" data-symbol="${escapeHtml(x.symbol)}" data-name="${escapeHtml(x.name)}" data-market="${x.market}"><strong>${escapeHtml(x.name)}</strong><span>${x.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"} · ${escapeHtml(x.symbol)}</span></button>`).join(""):'<div class="no-result">候補が見つかりません</div>';
+}
+async function renderExternalDetail(temp){
+ const c=autoComment(temp),f=temp.fundamentals||{};$("#detailTitle").textContent=displayName(temp);$("#detailPrice").textContent=temp.currentPriceJPY?yen(temp.currentPriceJPY):"—";
+ $("#detailBody").innerHTML=`<section class="detail-section"><h3>企業指標</h3><div class="fundamentals detail-metrics"><div><span>PER</span><strong>${Number.isFinite(f.trailingPE)?f.trailingPE.toFixed(1)+"倍":"—"}</strong></div><div><span>予想PER</span><strong>${Number.isFinite(f.forwardPE)?f.forwardPE.toFixed(1)+"倍":"—"}</strong></div><div><span>売上成長</span><strong>${Number.isFinite(f.revenueGrowth)?(f.revenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益率</span><strong>${Number.isFinite(f.profitMargin)?(f.profitMargin*100).toFixed(1)+"%":"—"}</strong></div></div></section><section class="detail-section"><h3>AI見通し</h3><div class="ai outlook"><div class="ai-head"><span class="badge">${escapeHtml(c.view)}</span><span class="badge">データ信頼度 ${c.quality}</span></div><div class="evidence">${c.evidence.map(x=>`<span>${escapeHtml(x)}</span>`).join("")}</div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>基本</b><span>${escapeHtml(c.base)}</span></div><div><b>強気</b><span>${escapeHtml(c.bull)}</span></div><div><b>弱気</b><span>${escapeHtml(c.bear)}</span></div></div></div></section>`;
+ $("#searchView").hidden=true;$("#homeView").hidden=true;$("#detailView").hidden=false;window.scrollTo(0,0);
+}
+$("#openSearch")?.addEventListener("click",showSearch);
+$("#searchBack")?.addEventListener("click",closeSearch);
+$("#globalSearch")?.addEventListener("input",()=>{clearTimeout(globalSearchTimer);globalSearchTimer=setTimeout(globalSearch,300)});
+$("#globalSuggestions")?.addEventListener("click",async e=>{const b=e.target.closest(".global-result");if(!b)return;const temp={market:b.dataset.market,name:b.dataset.name,symbol:b.dataset.symbol,purchasePriceJPY:0,shares:null,currentPriceJPY:0,updatedAt:null};try{await refreshOne(temp);await renderExternalDetail(temp)}catch{alert("分析データを取得できませんでした。")}});
+
 $("#refreshBtn").addEventListener("click",refreshAll);
 
 if("serviceWorker"in navigator){

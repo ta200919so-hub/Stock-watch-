@@ -15,8 +15,16 @@ function migrate(s){
     view:s.view||"—", ai:s.ai||"", updatedAt:null, legacy:true
   };
 }
-let stocks=(JSON.parse(localStorage.getItem(KEY)||"null")||[]).map(migrate);
-function save(){localStorage.setItem(KEY,JSON.stringify(stocks))}
+function readStocks(){
+  try{
+    const raw=localStorage.getItem(KEY);
+    if(raw){const parsed=JSON.parse(raw);if(Array.isArray(parsed)&&parsed.length)return parsed.map(migrate)}
+    for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||k===KEY)continue;try{const v=JSON.parse(localStorage.getItem(k));if(Array.isArray(v)&&v.length&&v.some(x=>x&&(x.symbol||x.ticker||x.purchasePriceJPY||x.start)))return v.map(migrate)}catch{}}
+  }catch{}
+  return [];
+}
+let stocks=readStocks();
+function save(){if(!Array.isArray(stocks)||!stocks.length)return;localStorage.setItem(KEY,JSON.stringify(stocks))}
 function pnlPct(s){
   if(!s.shares||!s.purchasePriceJPY||!s.currentPriceJPY)return null;
   return (s.currentPriceJPY/s.purchasePriceJPY-1)*100;
@@ -251,5 +259,5 @@ $("#refreshBtn").addEventListener("click",refreshAll);
 if("serviceWorker"in navigator){
   navigator.serviceWorker.register("./sw.js").then(reg=>reg.update()).catch(()=>{});
 }
-save();render();
+if(stocks.length)save();render();
 setTimeout(()=>{if(stocks.some(s=>s.symbol))refreshAll()},500);

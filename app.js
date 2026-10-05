@@ -53,14 +53,25 @@ function decision(s){
   return {label,kind,score,reasons:reasons.slice(0,3)};
 }
 function autoComment(s){
-  const p=pnlPct(s), d=Number.isFinite(s.dayChangePct)?s.dayChangePct:null;
-  if(p===null)return {view:"データ待ち",short:"現在株価または保有情報を取得すると分析します。",medium:"購入単価との比較データ待ちです。",risk:"価格データ不足。",watch:"株価を更新してください。"};
-  let view=p>=15?"強気寄り":p<=-10?"慎重":"中立";
-  const short=d===null?"前日比データ待ち":d>=2?`前日比 +${d.toFixed(1)}%。短期モメンタムは強め。`:d<=-2?`前日比 ${d.toFixed(1)}%。短期は売り圧力に注意。`:`前日比 ${d>=0?"+":""}${d.toFixed(1)}%。短期の値動きは比較的落ち着いています。`;
-  const medium=p>=15?`購入単価を${p.toFixed(1)}%上回っています。利益が乗っているため、上昇継続だけでなく利益確定による反落にも注意。`:p<=-10?`購入単価を${Math.abs(p).toFixed(1)}%下回っています。買値への回復を前提にせず、下落理由が業績要因か市場要因か確認したい局面。`:`購入単価との差は${p>=0?"+":""}${p.toFixed(1)}%。現時点では方向感を決めつけず、次の材料確認を優先。`;
-  const risk=Math.abs(d||0)>=4?"1日の変動が大きく、短期ボラティリティが高まっています。":p>=25?"含み益が大きく、好材料を織り込んでいる可能性に注意。":p<=-15?"含み損が拡大しています。追加購入は下落要因の確認後に判断したい水準。":"購入単価だけで判断せず、決算・業績予想・セクター動向の確認が必要。";
-  const watch="総合判定とニュース、企業指標を合わせて確認。単一の点数だけで売買判断しないこと。";
-  return {view,short,medium,risk,watch};
+  const d=Number.isFinite(s.dayChangePct)?s.dayChangePct:null,f=s.fundamentals||{},news=s.news||[];
+  const pos=news.filter(n=>n.impact==="positive").length,neg=news.filter(n=>n.impact==="negative").length;
+  let score=50,evidence=[];
+  if(d!==null){score+=Math.max(-10,Math.min(10,d*2));evidence.push(`前日比 ${d>=0?"+":""}${d.toFixed(1)}%`);}
+  if(Number.isFinite(f.revenueGrowth)){score+=f.revenueGrowth>0.1?10:f.revenueGrowth<0?-10:2;evidence.push(`売上成長 ${(f.revenueGrowth*100).toFixed(1)}%`);}
+  if(Number.isFinite(f.earningsGrowth)){score+=f.earningsGrowth>0.1?10:f.earningsGrowth<0?-10:2;evidence.push(`利益成長 ${(f.earningsGrowth*100).toFixed(1)}%`);}
+  if(Number.isFinite(f.profitMargin)){score+=f.profitMargin>0.15?7:f.profitMargin<0?-8:2;evidence.push(`利益率 ${(f.profitMargin*100).toFixed(1)}%`);}
+  if(Number.isFinite(f.trailingPE)){if(f.trailingPE>60)score-=8;else if(f.trailingPE>0&&f.trailingPE<20)score+=5;evidence.push(`PER ${f.trailingPE.toFixed(1)}倍`);}
+  if(pos>neg){score+=8;evidence.push(`好材料ニュース ${pos}件`);}else if(neg>pos){score-=10;evidence.push(`悪材料ニュース ${neg}件`);}
+  if(Number.isFinite(f.targetMeanPriceJPY)&&s.currentPriceJPY){const gap=(f.targetMeanPriceJPY/s.currentPriceJPY-1)*100;score+=Math.max(-8,Math.min(8,gap/5));evidence.push(`目標株価乖離 ${gap>=0?"+":""}${gap.toFixed(0)}%`);}
+  score=Math.max(0,Math.min(100,Math.round(score)));
+  const view=score>=65?"強気寄り":score<42?"弱気寄り":"中立";
+  const short=d===null?"短期データは不足。ニュースと次の株価更新を優先。":d>=2?"1〜4週は上向きモメンタム。ただし急伸後の反落には注意。":d<=-2?"1〜4週は下向き圧力が優勢。悪材料の継続性を確認。":"1〜4週は方向感が弱く、次の材料で動きやすい局面。";
+  const growth=Number.isFinite(f.revenueGrowth)?f.revenueGrowth:null,earn=Number.isFinite(f.earningsGrowth)?f.earningsGrowth:null;
+  const base=(growth!==null||earn!==null)?`3〜12か月の基本シナリオは${score>=60?"成長継続なら上値余地を維持":"業績確認を優先"}。売上・利益の伸びが次の軸。`:"3〜12か月は業績データ不足のため、決算・会社予想の更新が最重要。";
+  const bull=`強気：${growth!==null&&growth>0.1?"売上成長が続き": "業績が市場予想を上回り"}、好材料が増えれば評価切り上げ。`;
+  const bear=`弱気：${neg?"悪材料が継続し、":"業績予想が悪化し、"}成長鈍化やバリュエーション調整が重なると下押し。`;
+  const change=`見通し変更条件：次回決算の売上・利益成長、会社予想、重要ニュース${Number.isFinite(f.trailingPE)?"、PER水準":""}。`;
+  return {view,score,short,base,bull,bear,change,evidence:evidence.slice(0,4)};
 }
 function focusScore(s){
   let score=0,reasons=[];const d=Number.isFinite(s.dayChangePct)?s.dayChangePct:0,dec=decision(s),news=s.news||[];
@@ -109,7 +120,7 @@ function render(){
       <div class="decision ${dec.kind}"><div><span>総合判定</span><strong>${escapeHtml(dec.label)}</strong></div><b>${dec.score===null?"—":dec.score+"点"}</b><p>${dec.reasons.map(escapeHtml).join(" ・ ")}</p></div>
       <div class="fundamentals"><div><span>PER</span><strong>${Number.isFinite(s.fundamentals?.trailingPE)?s.fundamentals.trailingPE.toFixed(1):"—"}</strong></div><div><span>売上成長</span><strong>${Number.isFinite(s.fundamentals?.revenueGrowth)?(s.fundamentals.revenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益率</span><strong>${Number.isFinite(s.fundamentals?.profitMargin)?(s.fundamentals.profitMargin*100).toFixed(1)+"%":"—"}</strong></div><div><span>目標株価</span><strong>${Number.isFinite(s.fundamentals?.targetMeanPriceJPY)?yen(s.fundamentals.targetMeanPriceJPY):"—"}</strong></div></div>
       ${s.news?.length?`<div class="news-box"><div class="news-head">📰 最新ニュース</div>${s.news.slice(0,3).map(n=>`<a class="news-item" href="${escapeHtml(n.url||"#")}" target="_blank" rel="noopener"><div><span class="impact ${n.impact}">${n.impact==="positive"?"好材料":n.impact==="negative"?"悪材料":"中立"}</span><small>${escapeHtml(n.publisher||"News")}</small></div><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.reason)}</p></a>`).join("")}</div>`:""}
-      <div class="ai"><div class="ai-head">🤖 AI見通し <span class="badge">${escapeHtml(c.view)}</span><span class="score">${stockScore(s)===null?"—":stockScore(s)+"点"}</span></div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>中期</b><span>${escapeHtml(c.medium)}</span></div><div><b>リスク</b><span>${escapeHtml(c.risk)}</span></div><div><b>次に見る</b><span>${escapeHtml(c.watch)}</span></div></div></div>
+      <div class="ai outlook"><div class="ai-head">🤖 AI見通し <span class="badge">${escapeHtml(c.view)}</span><span class="score">${c.score}点</span></div><div class="evidence">${c.evidence.length?c.evidence.map(x=>`<span>${escapeHtml(x)}</span>`).join(""):'<span>取得データ待ち</span>'}</div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>基本</b><span>${escapeHtml(c.base)}</span></div><div><b>強気</b><span>${escapeHtml(c.bull)}</span></div><div><b>弱気</b><span>${escapeHtml(c.bear)}</span></div><div><b>変更条件</b><span>${escapeHtml(c.change)}</span></div></div></div>
       <div class="bottom"><div class="small">${s.memo?escapeHtml(s.memo):s.updatedAt?`更新 ${new Date(s.updatedAt).toLocaleString("ja-JP")}`:""}</div><div class="card-actions"><button class="edit" data-edit="${i}">編集</button><button class="delete" data-del="${i}">削除</button></div></div>
     </article>`;
   }).join(""):`<div class="empty">保有銘柄を追加してポートフォリオ管理を始めよう。</div>`;

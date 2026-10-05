@@ -96,45 +96,26 @@ function portfolio(){
   const value=held.reduce((a,s)=>a+(s.currentPriceJPY||0)*s.shares,0);
   return {cost,value,pnl:value-cost,pct:cost?((value/cost)-1)*100:null};
 }
+function renderDetail(i){
+  const s=stocks[i];if(!s)return;const c=autoComment(s),dec=decision(s),f=s.fundamentals||{};
+  $("#detailTitle").textContent=displayName(s);$("#detailPrice").textContent=s.currentPriceJPY?yen(s.currentPriceJPY):"—";
+  $("#detailBody").innerHTML=`
+    <div class="decision ${dec.kind}"><div><span>総合判定</span><strong>${escapeHtml(dec.label)}</strong></div><b>${dec.score===null?"—":dec.score+"点"}</b><p>${dec.reasons.map(escapeHtml).join(" ・ ")}</p></div>
+    <section class="detail-section"><h3>企業指標</h3><div class="fundamentals detail-metrics"><div><span>PER</span><strong>${Number.isFinite(f.trailingPE)?f.trailingPE.toFixed(1)+"倍":"—"}</strong></div><div><span>予想PER</span><strong>${Number.isFinite(f.forwardPE)?f.forwardPE.toFixed(1)+"倍":"—"}</strong></div><div><span>売上成長</span><strong>${Number.isFinite(f.revenueGrowth)?(f.revenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益率</span><strong>${Number.isFinite(f.profitMargin)?(f.profitMargin*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益成長</span><strong>${Number.isFinite(f.earningsGrowth)?(f.earningsGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>目標株価</span><strong>${Number.isFinite(f.targetMeanPriceJPY)?yen(f.targetMeanPriceJPY):"—"}</strong></div></div></section>
+    <section class="detail-section"><h3>AI見通し</h3><div class="ai outlook"><div class="ai-head"><span class="badge">${escapeHtml(c.view)}</span><span class="score">${c.score}点</span></div><div class="evidence">${c.evidence.length?c.evidence.map(x=>`<span>${escapeHtml(x)}</span>`).join(""):'<span>取得データ待ち</span>'}</div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>基本</b><span>${escapeHtml(c.base)}</span></div><div><b>強気</b><span>${escapeHtml(c.bull)}</span></div><div><b>弱気</b><span>${escapeHtml(c.bear)}</span></div><div><b>変更条件</b><span>${escapeHtml(c.change)}</span></div></div></div></section>
+    <section class="detail-section"><h3>最新ニュース</h3>${s.news?.length?`<div class="news-box">${s.news.slice(0,5).map(n=>`<a class="news-item" href="${escapeHtml(n.url||"#")}" target="_blank" rel="noopener"><div><span class="impact ${n.impact}">${n.impact==="positive"?"好材料":n.impact==="negative"?"悪材料":"中立"}</span><small>${escapeHtml(n.publisher||"News")}</small></div><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.reason)}</p></a>`).join("")}</div>`:'<p class="muted">ニュースデータ待ち</p>'}</section>`;
+  $("#homeView").hidden=true;$("#detailView").hidden=false;window.scrollTo(0,0);
+}
 function render(){
   const shown=stocks.filter(s=>filter==="ALL"||s.market===filter);
   $("#list").innerHTML=shown.length?shown.map(s=>{
-    const i=stocks.indexOf(s), p=pnlPct(s), cls=p===null?"":p>=0?"up":"down";
-    const cost=s.shares? s.purchasePriceJPY*s.shares : null;
-    const value=s.shares&&s.currentPriceJPY? s.currentPriceJPY*s.shares : null;
-    const pl=cost!==null&&value!==null?value-cost:null;
-    const c=autoComment(s),dec=decision(s);
-    return `<article class="card">
-      <div class="top">
-        <div><div class="name">${escapeHtml(displayName(s))}</div><div class="market">${s.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"}</div></div>
-        <div class="price">${s.currentPriceJPY?yen(s.currentPriceJPY):"—"}<div class="price-label">現在株価</div></div>
-      </div>
-      ${s.shares?`<div class="holding-grid">
-        <div><span>購入単価</span><strong>${yen(s.purchasePriceJPY)}</strong></div>
-        <div><span>保有株数</span><strong>${num(s.shares)}株</strong></div>
-        <div><span>投資額</span><strong>${yen(cost)}</strong></div>
-        <div><span>現在評価額</span><strong>${value!==null?yen(value):"—"}</strong></div>
-      </div>
-      <div class="pnl-row"><span>含み損益</span><strong class="${cls}">${pl===null?"—":`${pl>=0?"+":""}${yen(pl)} ${p>=0?"+":""}${p.toFixed(1)}%`}</strong></div>`:
-      `<div class="legacy">以前の登録データです。保有株数が未設定のため総額計算から除外しています。</div>`}
-      <div class="decision ${dec.kind}"><div><span>総合判定</span><strong>${escapeHtml(dec.label)}</strong></div><b>${dec.score===null?"—":dec.score+"点"}</b><p>${dec.reasons.map(escapeHtml).join(" ・ ")}</p></div>
-      <div class="fundamentals"><div><span>PER</span><strong>${Number.isFinite(s.fundamentals?.trailingPE)?s.fundamentals.trailingPE.toFixed(1):"—"}</strong></div><div><span>売上成長</span><strong>${Number.isFinite(s.fundamentals?.revenueGrowth)?(s.fundamentals.revenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益率</span><strong>${Number.isFinite(s.fundamentals?.profitMargin)?(s.fundamentals.profitMargin*100).toFixed(1)+"%":"—"}</strong></div><div><span>目標株価</span><strong>${Number.isFinite(s.fundamentals?.targetMeanPriceJPY)?yen(s.fundamentals.targetMeanPriceJPY):"—"}</strong></div></div>
-      ${s.news?.length?`<div class="news-box"><div class="news-head">📰 最新ニュース</div>${s.news.slice(0,3).map(n=>`<a class="news-item" href="${escapeHtml(n.url||"#")}" target="_blank" rel="noopener"><div><span class="impact ${n.impact}">${n.impact==="positive"?"好材料":n.impact==="negative"?"悪材料":"中立"}</span><small>${escapeHtml(n.publisher||"News")}</small></div><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.reason)}</p></a>`).join("")}</div>`:""}
-      <div class="ai outlook"><div class="ai-head">🤖 AI見通し <span class="badge">${escapeHtml(c.view)}</span><span class="score">${c.score}点</span></div><div class="evidence">${c.evidence.length?c.evidence.map(x=>`<span>${escapeHtml(x)}</span>`).join(""):'<span>取得データ待ち</span>'}</div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>基本</b><span>${escapeHtml(c.base)}</span></div><div><b>強気</b><span>${escapeHtml(c.bull)}</span></div><div><b>弱気</b><span>${escapeHtml(c.bear)}</span></div><div><b>変更条件</b><span>${escapeHtml(c.change)}</span></div></div></div>
-      <div class="bottom"><div class="small">${s.memo?escapeHtml(s.memo):s.updatedAt?`更新 ${new Date(s.updatedAt).toLocaleString("ja-JP")}`:""}</div><div class="card-actions"><button class="edit" data-edit="${i}">編集</button><button class="delete" data-del="${i}">削除</button></div></div>
-    </article>`;
+    const i=stocks.indexOf(s),p=pnlPct(s),cls=p===null?"":p>=0?"up":"down",cost=s.shares?s.purchasePriceJPY*s.shares:null,value=s.shares&&s.currentPriceJPY?s.currentPriceJPY*s.shares:null,pl=cost!==null&&value!==null?value-cost:null,dec=decision(s),c=autoComment(s);
+    return `<article class="card compact-card" data-detail="${i}"><div class="top"><div><div class="name">${escapeHtml(displayName(s))}</div><div class="market">${s.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"}</div></div><div class="price">${s.currentPriceJPY?yen(s.currentPriceJPY):"—"}<div class="price-label">現在株価</div></div></div>
+    ${s.shares?`<div class="pnl-row"><span>含み損益</span><strong class="${cls}">${pl===null?"—":`${pl>=0?"+":""}${yen(pl)}　${p>=0?"+":""}${p.toFixed(1)}%`}</strong></div>`:""}
+    <div class="compact-decision"><span class="${dec.kind}">${escapeHtml(dec.label)} ${dec.score===null?"":dec.score+"点"}</span><p>AI見通し：${escapeHtml(c.view)} ・ ${escapeHtml(c.short)}</p></div>
+    <div class="bottom"><div class="small">${s.updatedAt?`更新 ${new Date(s.updatedAt).toLocaleString("ja-JP")}`:""}</div><div class="card-actions"><button class="edit" data-edit="${i}">編集</button><button class="delete" data-del="${i}">削除</button><span class="detail-arrow">分析を見る ›</span></div></div></article>`;
   }).join(""):`<div class="empty">保有銘柄を追加してポートフォリオ管理を始めよう。</div>`;
-
-  const t=portfolio();
-  $("#totalCost").textContent=yen(t.cost);
-  $("#totalValue").textContent=yen(t.value);
-  $("#totalPnl").textContent=(t.pnl>=0?"+":"")+yen(t.pnl);
-  $("#totalPnl").className=t.pnl>=0?"up":"down";
-  $("#totalPnlPct").textContent=t.pct===null?"—":`${t.pct>=0?"+":""}${t.pct.toFixed(1)}%`;
-  $("#totalPnlPct").className=t.pct===null?"":t.pct>=0?"up":"down";
-  renderTodayFocus();
-  renderAllocation();
-  renderRecommendations();
+  const t=portfolio();$("#totalCost").textContent=yen(t.cost);$("#totalValue").textContent=yen(t.value);$("#totalPnl").textContent=(t.pnl>=0?"+":"")+yen(t.pnl);$("#totalPnl").className=t.pnl>=0?"up":"down";$("#totalPnlPct").textContent=t.pct===null?"—":`${t.pct>=0?"+":""}${t.pct.toFixed(1)}%`;$("#totalPnlPct").className=t.pct===null?"":t.pct>=0?"up":"down";renderTodayFocus();renderAllocation();renderRecommendations();
 }
 function renderRecommendations(){
   const box=$("#recommendations"); if(!box)return;
@@ -228,8 +209,10 @@ $("#addForm").addEventListener("submit",async e=>{
 $("#list").addEventListener("click",e=>{
   const edit=e.target.closest("[data-edit]");
   if(edit){const i=Number(edit.dataset.edit),s=stocks[i];$("#editIndex").value=i;$("#editStockName").textContent=displayName(s);$("#editPurchasePrice").value=s.purchasePriceJPY||"";$("#editShares").value=s.shares||"";$("#editPurchaseDate").value=s.purchaseDate||"";$("#editMemo").value=s.memo||"";$("#editDialog").showModal();return}
-  const b=e.target.closest("[data-del]");if(!b)return;if(confirm("この銘柄を削除しますか？")){stocks.splice(Number(b.dataset.del),1);save();render()}
+  const b=e.target.closest("[data-del]");if(b){if(confirm("この銘柄を削除しますか？")){stocks.splice(Number(b.dataset.del),1);save();render()}return}
+  const card=e.target.closest("[data-detail]");if(card)renderDetail(Number(card.dataset.detail));
 });
+$("#backHome").addEventListener("click",()=>{$("#detailView").hidden=true;$("#homeView").hidden=false;window.scrollTo(0,0)});
 $("#closeEdit").addEventListener("click",()=>$("#editDialog").close());
 $("#editForm").addEventListener("submit",e=>{e.preventDefault();const i=Number($("#editIndex").value),s=stocks[i];if(!s)return;s.purchasePriceJPY=Number($("#editPurchasePrice").value);s.shares=Number($("#editShares").value);s.purchaseDate=$("#editPurchaseDate").value;s.memo=$("#editMemo").value.trim();save();render();$("#editDialog").close();status("保有情報を更新しました。","ok");setTimeout(()=>status(""),2000)});
 $("#refreshBtn").addEventListener("click",refreshAll);

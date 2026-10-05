@@ -22,6 +22,8 @@ export default async function handler(req, res) {
   try {
     const meta = await chart(symbol);
     const raw = Number(meta?.regularMarketPrice);
+    const prev = Number(meta?.chartPreviousClose || meta?.previousClose || 0);
+    const dayChangePct = prev ? (raw / prev - 1) * 100 : null;
 
     if (!raw) throw new Error("no_price");
 
@@ -48,7 +50,9 @@ export default async function handler(req, res) {
       fx,
       priceJPY,
       currency: meta?.currency || null,
-      marketTime: meta?.regularMarketTime || null
+      marketTime: meta?.regularMarketTime || null,
+      previousClose: prev || null,
+      dayChangePct
     });
   } catch (e) {
     return res.status(502).json({ error: "quote_failed" });

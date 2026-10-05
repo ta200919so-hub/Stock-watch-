@@ -153,30 +153,32 @@ function renderAllocation(){
 function status(msg,type=""){
   const el=$("#status"); el.hidden=!msg; el.textContent=msg; el.className=`status ${type}`;
 }
+async function fetchTimeout(url,ms=8000){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);try{return await fetch(url,{signal:c.signal})}finally{clearTimeout(t)}}
 async function refreshOne(s){
   if(!s.symbol)return s;
-  const r=await fetch(`/api/quote?symbol=${encodeURIComponent(s.symbol)}&market=${s.market}`);
+  const r=await fetchTimeout(`/api/quote?symbol=${encodeURIComponent(s.symbol)}&market=${s.market}`);
   if(!r.ok)throw new Error("quote");
   const q=await r.json();
   s.currentPriceJPY=q.priceJPY;
   s.dayChangePct=Number.isFinite(q.dayChangePct)?q.dayChangePct:null;
-  try{const fr=await fetch(`/api/fundamentals?symbol=${encodeURIComponent(s.symbol)}&market=${s.market}`);if(fr.ok)s.fundamentals=await fr.json()}catch(e){}
-  try{const nr=await fetch(`/api/news?symbol=${encodeURIComponent(s.symbol)}`);if(nr.ok){const nd=await nr.json();s.news=nd.items||[]}}catch(e){}
+  try{const fr=await fetchTimeout(`/api/fundamentals?symbol=${encodeURIComponent(s.symbol)}&market=${s.market}`);if(fr.ok)s.fundamentals=await fr.json()}catch(e){}
+  try{const nr=await fetchTimeout(`/api/news?symbol=${encodeURIComponent(s.symbol)}`);if(nr.ok){const nd=await nr.json();s.news=nd.items||[]}}catch(e){}
   s.updatedAt=Date.now();
   return s;
 }
 async function refreshAll(){
-  if(!stocks.length)return;
-  status("株価を更新中…");
-  $("#refreshBtn").disabled=true;
+  if(!stocks.length){status("保有銘柄がありません。","error");return}
+  const btn=$("#refreshBtn");if(btn.dataset.loading==="1")return;
+  btn.dataset.loading="1";btn.disabled=true;status("株価を更新中…");
   let ok=0;
-  for(const s of stocks){
-    try{await refreshOne(s);ok++}catch(e){}
+  try{
+    for(const s of stocks){try{await refreshOne(s);ok++}catch(e){}}
+    save();render();
+    status(ok?`${ok}銘柄の株価を更新しました`:"株価を取得できませんでした。もう一度お試しください。",ok?"ok":"error");
+  }finally{
+    btn.disabled=false;btn.dataset.loading="0";
+    setTimeout(()=>status(""),2500);
   }
-  save();render();
-  status(ok?`${ok}銘柄の株価を更新しました`:"株価を取得できませんでした。時間をおいて再度お試しください。",ok?"ok":"error");
-  $("#refreshBtn").disabled=false;
-  setTimeout(()=>status(""),2500);
 }
 async function searchStocks(){
   const q=$("#name").value.trim(), market=$("#market").value;

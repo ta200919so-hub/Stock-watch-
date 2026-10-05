@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1020" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Stock Watch AI" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="icon" href="icon.svg" />
+  <link rel="stylesheet" href="style.css" />
+  <title>Stock Watch AI</title>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <div>
+        <p class="eyebrow">MY STOCK WATCHLIST</p>
+        <h1>Stock Watch <span>AI</span></h1>
+        <p class="muted">日本株・米国株を円でまとめてチェック</p>
+      </div>
+      <button id="refreshBtn" class="icon-btn" aria-label="更新">↻</button>
+    </header>
+
+    <section class="summary">
+      <div class="metric"><span>ウォッチ</span><strong id="count">0</strong></div>
+      <div class="metric"><span>平均騰落率</span><strong id="average">—</strong></div>
+      <div class="metric"><span>最大上昇</span><strong id="best">—</strong></div>
+    </section>
+
+    <section class="toolbar">
+      <button class="filter active" data-filter="ALL">すべて</button>
+      <button class="filter" data-filter="JP">🇯🇵 日本</button>
+      <button class="filter" data-filter="US">🇺🇸 米国</button>
+    </section>
+
+    <section id="list" class="list"></section>
+
+    <button id="openAdd" class="fab">＋ 銘柄を追加</button>
+
+    <section class="notice">
+      <strong>AI見通し</strong>
+      <p>v1では登録情報から簡易コメントを表示します。API接続後は株価・決算・ニュース・為替を材料に自動更新できます。</p>
+    </section>
+  </main>
+
+  <dialog id="addDialog">
+    <form id="addForm">
+      <div class="dialog-head">
+        <h2>銘柄を追加</h2>
+        <button type="button" id="closeAdd" class="icon-btn">×</button>
+      </div>
+      <label>市場
+        <select id="market"><option value="JP">🇯🇵 日本株</option><option value="US">🇺🇸 米国株</option></select>
+      </label>
+      <label>銘柄名<input id="name" required placeholder="例：NVIDIA" /></label>
+      <label>ティッカー / 証券コード<input id="ticker" required placeholder="NVDA / 8035" /></label>
+      <label>気になった時の円換算価格<input id="startPrice" type="number" min="0.01" step="0.01" required placeholder="22500" /></label>
+      <label>現在の円換算価格<input id="currentPrice" type="number" min="0.01" step="0.01" required placeholder="27750" /></label>
+      <label>気になった理由<input id="memo" placeholder="AI需要が伸びそう" /></label>
+      <button class="primary" type="submit">ウォッチリストに追加</button>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -26,6 +26,14 @@ const JA_NAMES={
   "8035.T":"東京エレクトロン","7974.T":"任天堂","2802.T":"味の素","8001.T":"伊藤忠商事","7011.T":"三菱重工業","7012.T":"川崎重工業","7701.T":"島津製作所","5332.T":"TOTO","7203.T":"トヨタ自動車","6758.T":"ソニーグループ","6501.T":"日立製作所","6702.T":"富士通","6502.T":"東芝"
 };
 function displayName(s){return JA_NAMES[s.symbol]||s.name||s.symbol||"銘柄"}
+const SECTORS={"NVDA":"半導体","AMAT":"半導体","QCOM":"半導体","AVGO":"半導体","8035.T":"半導体","7974.T":"ゲーム","2802.T":"食品","8001.T":"商社","7011.T":"重工","7012.T":"重工","7701.T":"精密機器","5332.T":"住宅設備","7203.T":"自動車","6758.T":"エンタメ","6501.T":"IT・インフラ","6702.T":"IT","AAPL":"テクノロジー","MSFT":"テクノロジー","GOOGL":"インターネット","AMZN":"消費・クラウド","META":"インターネット","TSLA":"自動車"};
+function stockScore(s){
+  const p=pnlPct(s),d=Number.isFinite(s.dayChangePct)?s.dayChangePct:0;
+  if(p===null)return null;
+  let score=50+Math.max(-15,Math.min(15,p/2))+Math.max(-10,Math.min(10,d*2));
+  if(p>35)score-=8;if(p<-20)score-=8;
+  return Math.max(0,Math.min(100,Math.round(score)));
+}
 function autoComment(s){
   const p=pnlPct(s), d=Number.isFinite(s.dayChangePct)?s.dayChangePct:null;
   if(p===null)return {view:"データ待ち",short:"現在株価または保有情報を取得すると分析します。",medium:"購入単価との比較データ待ちです。",risk:"価格データ不足。",watch:"株価を更新してください。"};
@@ -63,7 +71,7 @@ function render(){
       </div>
       <div class="pnl-row"><span>含み損益</span><strong class="${cls}">${pl===null?"—":`${pl>=0?"+":""}${yen(pl)} ${p>=0?"+":""}${p.toFixed(1)}%`}</strong></div>`:
       `<div class="legacy">以前の登録データです。保有株数が未設定のため総額計算から除外しています。</div>`}
-      <div class="ai"><div class="ai-head">🤖 AI見通し <span class="badge">${escapeHtml(c.view)}</span></div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>中期</b><span>${escapeHtml(c.medium)}</span></div><div><b>リスク</b><span>${escapeHtml(c.risk)}</span></div><div><b>次に見る</b><span>${escapeHtml(c.watch)}</span></div></div></div>
+      <div class="ai"><div class="ai-head">🤖 AI見通し <span class="badge">${escapeHtml(c.view)}</span><span class="score">${stockScore(s)===null?"—":stockScore(s)+"点"}</span></div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>中期</b><span>${escapeHtml(c.medium)}</span></div><div><b>リスク</b><span>${escapeHtml(c.risk)}</span></div><div><b>次に見る</b><span>${escapeHtml(c.watch)}</span></div></div></div>
       <div class="bottom"><div class="small">${s.memo?escapeHtml(s.memo):s.updatedAt?`更新 ${new Date(s.updatedAt).toLocaleString("ja-JP")}`:""}</div><div class="card-actions"><button class="edit" data-edit="${i}">編集</button><button class="delete" data-del="${i}">削除</button></div></div>
     </article>`;
   }).join(""):`<div class="empty">保有銘柄を追加してポートフォリオ管理を始めよう。</div>`;
@@ -76,6 +84,20 @@ function render(){
   $("#totalPnlPct").textContent=t.pct===null?"—":`${t.pct>=0?"+":""}${t.pct.toFixed(1)}%`;
   $("#totalPnlPct").className=t.pct===null?"":t.pct>=0?"up":"down";
   renderAllocation();
+  renderRecommendations();
+}
+function renderRecommendations(){
+  const box=$("#recommendations"); if(!box)return;
+  const held=new Set(stocks.map(s=>s.symbol));
+  const sectorCounts={};stocks.forEach(s=>{const sec=SECTORS[s.symbol]||"その他";sectorCounts[sec]=(sectorCounts[sec]||0)+1});
+  const candidates=[
+    {symbol:"2802.T",name:"味の素",sector:"食品",why:"景気敏感・半導体への偏りを和らげる候補"},
+    {symbol:"8001.T",name:"伊藤忠商事",sector:"商社",why:"事業分散が広く、単一テーマへの集中を抑えやすい"},
+    {symbol:"7203.T",name:"トヨタ自動車",sector:"自動車",why:"製造業の中でも半導体装置とは異なる収益源"},
+    {symbol:"6758.T",name:"ソニーグループ",sector:"エンタメ",why:"ゲーム・音楽・映像などIP収益を組み合わせられる"},
+    {symbol:"MSFT",name:"マイクロソフト",sector:"テクノロジー",why:"AI需要を取り込みつつクラウド・ソフトの継続収益も持つ"}
+  ].filter(x=>!held.has(x.symbol)).map(x=>({...x,fit:sectorCounts[x.sector]?72:86})).sort((a,b)=>b.fit-a.fit).slice(0,3);
+  box.innerHTML=candidates.length?candidates.map(x=>`<div class="recommend"><div><strong>${escapeHtml(x.name)}</strong><span>${escapeHtml(x.sector)}</span></div><b>${x.fit}点</b><p>${escapeHtml(x.why)}</p><small>候補スコアはポートフォリオ分散を中心に算出。買い推奨ではありません。</small></div>`).join(""):'<div class="muted">候補を計算するには保有銘柄を登録してください。</div>';
 }
 function renderAllocation(){
   const held=stocks.filter(s=>s.shares>0&&s.currentPriceJPY>0).map(s=>({...s,value:s.shares*s.currentPriceJPY})).sort((a,b)=>b.value-a.value);

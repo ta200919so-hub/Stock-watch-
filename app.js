@@ -37,6 +37,21 @@ function stockScore(s){
   if(Number.isFinite(s.fundamentals?.trailingPE)&&s.fundamentals.trailingPE>60)score-=5;
   return Math.max(0,Math.min(100,Math.round(score)));
 }
+function decision(s){
+  const base=stockScore(s);if(base===null)return {label:"データ待ち",kind:"neutral",score:null,reasons:["株価と保有情報を更新してください。"]};
+  let score=base,reasons=[];const f=s.fundamentals||{},news=s.news||[];
+  const total=stocks.reduce((a,x)=>a+(x.shares||0)*(x.currentPriceJPY||0),0),value=(s.shares||0)*(s.currentPriceJPY||0),weight=total?value/total:0;
+  const pos=news.filter(n=>n.impact==="positive").length,neg=news.filter(n=>n.impact==="negative").length;
+  if(pos>neg){score+=5;reasons.push("直近ニュースは好材料が優勢");}else if(neg>pos){score-=7;reasons.push("直近ニュースは悪材料が優勢");}
+  if(Number.isFinite(f.revenueGrowth)){if(f.revenueGrowth>0.1)reasons.push("売上成長率が10%超");else if(f.revenueGrowth<0)reasons.push("売上成長率がマイナス");}
+  if(Number.isFinite(f.profitMargin)&&f.profitMargin>0.15)reasons.push("利益率が比較的高い");
+  if(Number.isFinite(f.trailingPE)&&f.trailingPE>60){score-=4;reasons.push("PERが高水準");}
+  if(weight>0.35){score-=10;reasons.push("ポートフォリオ比率が35%超");}
+  score=Math.max(0,Math.min(100,Math.round(score)));
+  const label=score>=68?"買い増し検討":score<45?"注意":"様子見",kind=score>=68?"positive":score<45?"negative":"neutral";
+  if(!reasons.length)reasons.push("価格・企業指標を総合すると中立圏");
+  return {label,kind,score,reasons:reasons.slice(0,3)};
+}
 function autoComment(s){
   const p=pnlPct(s), d=Number.isFinite(s.dayChangePct)?s.dayChangePct:null;
   if(p===null)return {view:"データ待ち",short:"現在株価または保有情報を取得すると分析します。",medium:"購入単価との比較データ待ちです。",risk:"価格データ不足。",watch:"株価を更新してください。"};
@@ -44,7 +59,7 @@ function autoComment(s){
   const short=d===null?"前日比データ待ち":d>=2?`前日比 +${d.toFixed(1)}%。短期モメンタムは強め。`:d<=-2?`前日比 ${d.toFixed(1)}%。短期は売り圧力に注意。`:`前日比 ${d>=0?"+":""}${d.toFixed(1)}%。短期の値動きは比較的落ち着いています。`;
   const medium=p>=15?`購入単価を${p.toFixed(1)}%上回っています。利益が乗っているため、上昇継続だけでなく利益確定による反落にも注意。`:p<=-10?`購入単価を${Math.abs(p).toFixed(1)}%下回っています。買値への回復を前提にせず、下落理由が業績要因か市場要因か確認したい局面。`:`購入単価との差は${p>=0?"+":""}${p.toFixed(1)}%。現時点では方向感を決めつけず、次の材料確認を優先。`;
   const risk=Math.abs(d||0)>=4?"1日の変動が大きく、短期ボラティリティが高まっています。":p>=25?"含み益が大きく、好材料を織り込んでいる可能性に注意。":p<=-15?"含み損が拡大しています。追加購入は下落要因の確認後に判断したい水準。":"購入単価だけで判断せず、決算・業績予想・セクター動向の確認が必要。";
-  const watch="次は「直近決算・会社予想・関連ニュース」を確認。v3.2でこの情報を自動連携予定。";
+  const watch="総合判定とニュース、企業指標を合わせて確認。単一の点数だけで売買判断しないこと。";
   return {view,short,medium,risk,watch};
 }
 function portfolio(){
@@ -60,7 +75,7 @@ function render(){
     const cost=s.shares? s.purchasePriceJPY*s.shares : null;
     const value=s.shares&&s.currentPriceJPY? s.currentPriceJPY*s.shares : null;
     const pl=cost!==null&&value!==null?value-cost:null;
-    const c=autoComment(s);
+    const c=autoComment(s),dec=decision(s);
     return `<article class="card">
       <div class="top">
         <div><div class="name">${escapeHtml(displayName(s))}</div><div class="market">${s.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"}</div></div>
@@ -74,6 +89,7 @@ function render(){
       </div>
       <div class="pnl-row"><span>含み損益</span><strong class="${cls}">${pl===null?"—":`${pl>=0?"+":""}${yen(pl)} ${p>=0?"+":""}${p.toFixed(1)}%`}</strong></div>`:
       `<div class="legacy">以前の登録データです。保有株数が未設定のため総額計算から除外しています。</div>`}
+      <div class="decision ${dec.kind}"><div><span>総合判定</span><strong>${escapeHtml(dec.label)}</strong></div><b>${dec.score===null?"—":dec.score+"点"}</b><p>${dec.reasons.map(escapeHtml).join(" ・ ")}</p></div>
       <div class="fundamentals"><div><span>PER</span><strong>${Number.isFinite(s.fundamentals?.trailingPE)?s.fundamentals.trailingPE.toFixed(1):"—"}</strong></div><div><span>売上成長</span><strong>${Number.isFinite(s.fundamentals?.revenueGrowth)?(s.fundamentals.revenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益率</span><strong>${Number.isFinite(s.fundamentals?.profitMargin)?(s.fundamentals.profitMargin*100).toFixed(1)+"%":"—"}</strong></div><div><span>目標株価</span><strong>${Number.isFinite(s.fundamentals?.targetMeanPriceJPY)?yen(s.fundamentals.targetMeanPriceJPY):"—"}</strong></div></div>
       ${s.news?.length?`<div class="news-box"><div class="news-head">📰 最新ニュース</div>${s.news.slice(0,3).map(n=>`<a class="news-item" href="${escapeHtml(n.url||"#")}" target="_blank" rel="noopener"><div><span class="impact ${n.impact}">${n.impact==="positive"?"好材料":n.impact==="negative"?"悪材料":"中立"}</span><small>${escapeHtml(n.publisher||"News")}</small></div><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.reason)}</p></a>`).join("")}</div>`:""}
       <div class="ai"><div class="ai-head">🤖 AI見通し <span class="badge">${escapeHtml(c.view)}</span><span class="score">${stockScore(s)===null?"—":stockScore(s)+"点"}</span></div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>中期</b><span>${escapeHtml(c.medium)}</span></div><div><b>リスク</b><span>${escapeHtml(c.risk)}</span></div><div><b>次に見る</b><span>${escapeHtml(c.watch)}</span></div></div></div>

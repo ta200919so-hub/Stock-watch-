@@ -1,4 +1,5 @@
 const KEY="stock-watch-ai-v1";
+const BACKUP_KEY="stock-watch-ai-backup-v1";
 let filter="ALL";
 let searchTimer=null;
 const $=s=>document.querySelector(s);
@@ -17,6 +18,9 @@ function migrate(s){
 }
 function readStocks(){
   try{
+    const backup=localStorage.getItem(BACKUP_KEY);
+    const primary=localStorage.getItem(KEY);
+    if((!primary||primary==="[]"||primary==="null")&&backup){const b=JSON.parse(backup);if(Array.isArray(b)&&b.length)return b.map(migrate)}
     const raw=localStorage.getItem(KEY);
     if(raw){const parsed=JSON.parse(raw);if(Array.isArray(parsed)&&parsed.length)return parsed.map(migrate)}
     for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||k===KEY)continue;try{const v=JSON.parse(localStorage.getItem(k));if(Array.isArray(v)&&v.length&&v.some(x=>x&&(x.symbol||x.ticker||x.purchasePriceJPY||x.start)))return v.map(migrate)}catch{}}
@@ -24,7 +28,19 @@ function readStocks(){
   return [];
 }
 let stocks=readStocks();
-function save(){if(!Array.isArray(stocks)||!stocks.length)return;localStorage.setItem(KEY,JSON.stringify(stocks))}
+function save(){
+ if(!Array.isArray(stocks)||!stocks.length)return;
+ const data=JSON.stringify(stocks);
+ try{
+   const current=localStorage.getItem(KEY);
+   if(current){const old=JSON.parse(current);if(Array.isArray(old)&&old.length)localStorage.setItem(BACKUP_KEY,current)}
+   localStorage.setItem(KEY,data);
+   localStorage.setItem(BACKUP_KEY,data);
+ }catch{}
+}
+function restoreBackup(){
+ try{const raw=localStorage.getItem(BACKUP_KEY);const v=JSON.parse(raw||"null");if(Array.isArray(v)&&v.length){stocks=v.map(migrate);save();render();return true}}catch{}return false
+}
 function pnlPct(s){
   if(!s.shares||!s.purchasePriceJPY||!s.currentPriceJPY)return null;
   return (s.currentPriceJPY/s.purchasePriceJPY-1)*100;

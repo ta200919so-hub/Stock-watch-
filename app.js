@@ -21,12 +21,20 @@ function pnlPct(s){
   if(!s.shares||!s.purchasePriceJPY||!s.currentPriceJPY)return null;
   return (s.currentPriceJPY/s.purchasePriceJPY-1)*100;
 }
+const JA_NAMES={
+  "NVDA":"エヌビディア","AMAT":"アプライド マテリアルズ","AAPL":"アップル","MSFT":"マイクロソフト","GOOGL":"アルファベット","GOOG":"アルファベット","AMZN":"アマゾン","META":"メタ・プラットフォームズ","TSLA":"テスラ","AVGO":"ブロードコム","QCOM":"クアルコム",
+  "8035.T":"東京エレクトロン","7974.T":"任天堂","2802.T":"味の素","8001.T":"伊藤忠商事","7011.T":"三菱重工業","7012.T":"川崎重工業","7701.T":"島津製作所","5332.T":"TOTO","7203.T":"トヨタ自動車","6758.T":"ソニーグループ","6501.T":"日立製作所","6702.T":"富士通","6502.T":"東芝"
+};
+function displayName(s){return JA_NAMES[s.symbol]||s.name||s.symbol||"銘柄"}
 function autoComment(s){
-  const p=pnlPct(s);
-  if(p===null)return {view:"データ待ち",ai:"保有情報または現在株価を取得すると、値動きに応じたコメントを表示します。"};
-  if(p>15)return {view:"上昇基調",ai:`購入単価から${p.toFixed(1)}%上昇。勢いは強い一方、決算・業績見通しと過熱感を確認したい局面。`};
-  if(p<-10)return {view:"慎重",ai:`購入単価から${Math.abs(p).toFixed(1)}%下落。業績悪化による下落か、一時的な調整かの確認が重要。`};
-  return {view:"中立",ai:"購入単価からの値動きは比較的限定的。次の決算、業績予想、関連ニュースを確認したい局面。"};
+  const p=pnlPct(s), d=Number.isFinite(s.dayChangePct)?s.dayChangePct:null;
+  if(p===null)return {view:"データ待ち",short:"現在株価または保有情報を取得すると分析します。",medium:"購入単価との比較データ待ちです。",risk:"価格データ不足。",watch:"株価を更新してください。"};
+  let view=p>=15?"強気寄り":p<=-10?"慎重":"中立";
+  const short=d===null?"前日比データ待ち":d>=2?`前日比 +${d.toFixed(1)}%。短期モメンタムは強め。`:d<=-2?`前日比 ${d.toFixed(1)}%。短期は売り圧力に注意。`:`前日比 ${d>=0?"+":""}${d.toFixed(1)}%。短期の値動きは比較的落ち着いています。`;
+  const medium=p>=15?`購入単価を${p.toFixed(1)}%上回っています。利益が乗っているため、上昇継続だけでなく利益確定による反落にも注意。`:p<=-10?`購入単価を${Math.abs(p).toFixed(1)}%下回っています。買値への回復を前提にせず、下落理由が業績要因か市場要因か確認したい局面。`:`購入単価との差は${p>=0?"+":""}${p.toFixed(1)}%。現時点では方向感を決めつけず、次の材料確認を優先。`;
+  const risk=Math.abs(d||0)>=4?"1日の変動が大きく、短期ボラティリティが高まっています。":p>=25?"含み益が大きく、好材料を織り込んでいる可能性に注意。":p<=-15?"含み損が拡大しています。追加購入は下落要因の確認後に判断したい水準。":"購入単価だけで判断せず、決算・業績予想・セクター動向の確認が必要。";
+  const watch="次は「直近決算・会社予想・関連ニュース」を確認。v3.2でこの情報を自動連携予定。";
+  return {view,short,medium,risk,watch};
 }
 function portfolio(){
   const held=stocks.filter(s=>s.shares>0&&s.purchasePriceJPY>0);
@@ -44,7 +52,7 @@ function render(){
     const c=autoComment(s);
     return `<article class="card">
       <div class="top">
-        <div><div class="name">${escapeHtml(s.name)}</div><div class="market">${s.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"}</div></div>
+        <div><div class="name">${escapeHtml(displayName(s))}</div><div class="market">${s.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"}</div></div>
         <div class="price">${s.currentPriceJPY?yen(s.currentPriceJPY):"—"}<div class="price-label">現在株価</div></div>
       </div>
       ${s.shares?`<div class="holding-grid">
@@ -55,7 +63,7 @@ function render(){
       </div>
       <div class="pnl-row"><span>含み損益</span><strong class="${cls}">${pl===null?"—":`${pl>=0?"+":""}${yen(pl)} ${p>=0?"+":""}${p.toFixed(1)}%`}</strong></div>`:
       `<div class="legacy">以前の登録データです。保有株数が未設定のため総額計算から除外しています。</div>`}
-      <div class="ai"><div class="ai-head">🤖 AI見通し <span class="badge">${escapeHtml(c.view)}</span></div>${escapeHtml(c.ai)}</div>
+      <div class="ai"><div class="ai-head">🤖 AI見通し <span class="badge">${escapeHtml(c.view)}</span></div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>中期</b><span>${escapeHtml(c.medium)}</span></div><div><b>リスク</b><span>${escapeHtml(c.risk)}</span></div><div><b>次に見る</b><span>${escapeHtml(c.watch)}</span></div></div></div>
       <div class="bottom"><div class="small">${s.memo?escapeHtml(s.memo):s.updatedAt?`更新 ${new Date(s.updatedAt).toLocaleString("ja-JP")}`:""}</div><div class="card-actions"><button class="edit" data-edit="${i}">編集</button><button class="delete" data-del="${i}">削除</button></div></div>
     </article>`;
   }).join(""):`<div class="empty">保有銘柄を追加してポートフォリオ管理を始めよう。</div>`;
@@ -67,6 +75,19 @@ function render(){
   $("#totalPnl").className=t.pnl>=0?"up":"down";
   $("#totalPnlPct").textContent=t.pct===null?"—":`${t.pct>=0?"+":""}${t.pct.toFixed(1)}%`;
   $("#totalPnlPct").className=t.pct===null?"":t.pct>=0?"up":"down";
+  renderAllocation();
+}
+function renderAllocation(){
+  const held=stocks.filter(s=>s.shares>0&&s.currentPriceJPY>0).map(s=>({...s,value:s.shares*s.currentPriceJPY})).sort((a,b)=>b.value-a.value);
+  const total=held.reduce((a,s)=>a+s.value,0);
+  $("#donutTotal").textContent=yen(total); $("#holdingCount").textContent=held.length?held.length+"銘柄":"";
+  if(!total){$("#donut").style.background="var(--panel2)";$("#legend").innerHTML='<span class="muted">現在株価を取得すると表示されます</span>';$("#concentration").textContent="保有データが揃うと構成比を分析します。";return}
+  const colors=["#7c8cff","#4ade80","#fbbf24","#fb7185","#38bdf8","#c084fc","#fb923c","#94a3b8"];
+  let at=0,stops=[];held.forEach((s,i)=>{const p=s.value/total*100;stops.push(`${colors[i%colors.length]} ${at}% ${at+p}%`);at+=p});
+  $("#donut").style.background=`conic-gradient(${stops.join(",")})`;
+  $("#legend").innerHTML=held.map((s,i)=>`<div class="legend-row"><i style="background:${colors[i%colors.length]}"></i><span>${escapeHtml(displayName(s))}</span><strong>${(s.value/total*100).toFixed(1)}%</strong></div>`).join("");
+  const top=held[0],pct=top.value/total*100,name=displayName(top);
+  $("#concentration").textContent=pct>=40?`⚠️ ${name}が${pct.toFixed(0)}%を占めています。1銘柄への集中度は高めです。`:`✓ 最大比率は${name}の${pct.toFixed(0)}%。銘柄別の偏りをここで確認できます。`;
 }
 function status(msg,type=""){
   const el=$("#status"); el.hidden=!msg; el.textContent=msg; el.className=`status ${type}`;
@@ -77,6 +98,7 @@ async function refreshOne(s){
   if(!r.ok)throw new Error("quote");
   const q=await r.json();
   s.currentPriceJPY=q.priceJPY;
+  s.dayChangePct=Number.isFinite(q.dayChangePct)?q.dayChangePct:null;
   s.updatedAt=Date.now();
   return s;
 }
@@ -129,7 +151,7 @@ $("#addForm").addEventListener("submit",async e=>{
 });
 $("#list").addEventListener("click",e=>{
   const edit=e.target.closest("[data-edit]");
-  if(edit){const i=Number(edit.dataset.edit),s=stocks[i];$("#editIndex").value=i;$("#editStockName").textContent=s.name;$("#editPurchasePrice").value=s.purchasePriceJPY||"";$("#editShares").value=s.shares||"";$("#editPurchaseDate").value=s.purchaseDate||"";$("#editMemo").value=s.memo||"";$("#editDialog").showModal();return}
+  if(edit){const i=Number(edit.dataset.edit),s=stocks[i];$("#editIndex").value=i;$("#editStockName").textContent=displayName(s);$("#editPurchasePrice").value=s.purchasePriceJPY||"";$("#editShares").value=s.shares||"";$("#editPurchaseDate").value=s.purchaseDate||"";$("#editMemo").value=s.memo||"";$("#editDialog").showModal();return}
   const b=e.target.closest("[data-del]");if(!b)return;if(confirm("この銘柄を削除しますか？")){stocks.splice(Number(b.dataset.del),1);save();render()}
 });
 $("#closeEdit").addEventListener("click",()=>$("#editDialog").close());

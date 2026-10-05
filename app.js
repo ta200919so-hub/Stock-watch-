@@ -75,6 +75,7 @@ function render(){
       <div class="pnl-row"><span>含み損益</span><strong class="${cls}">${pl===null?"—":`${pl>=0?"+":""}${yen(pl)} ${p>=0?"+":""}${p.toFixed(1)}%`}</strong></div>`:
       `<div class="legacy">以前の登録データです。保有株数が未設定のため総額計算から除外しています。</div>`}
       <div class="fundamentals"><div><span>PER</span><strong>${Number.isFinite(s.fundamentals?.trailingPE)?s.fundamentals.trailingPE.toFixed(1):"—"}</strong></div><div><span>売上成長</span><strong>${Number.isFinite(s.fundamentals?.revenueGrowth)?(s.fundamentals.revenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益率</span><strong>${Number.isFinite(s.fundamentals?.profitMargin)?(s.fundamentals.profitMargin*100).toFixed(1)+"%":"—"}</strong></div><div><span>目標株価</span><strong>${Number.isFinite(s.fundamentals?.targetMeanPriceJPY)?yen(s.fundamentals.targetMeanPriceJPY):"—"}</strong></div></div>
+      ${s.news?.length?`<div class="news-box"><div class="news-head">📰 最新ニュース</div>${s.news.slice(0,3).map(n=>`<a class="news-item" href="${escapeHtml(n.url||"#")}" target="_blank" rel="noopener"><div><span class="impact ${n.impact}">${n.impact==="positive"?"好材料":n.impact==="negative"?"悪材料":"中立"}</span><small>${escapeHtml(n.publisher||"News")}</small></div><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.reason)}</p></a>`).join("")}</div>`:""}
       <div class="ai"><div class="ai-head">🤖 AI見通し <span class="badge">${escapeHtml(c.view)}</span><span class="score">${stockScore(s)===null?"—":stockScore(s)+"点"}</span></div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>中期</b><span>${escapeHtml(c.medium)}</span></div><div><b>リスク</b><span>${escapeHtml(c.risk)}</span></div><div><b>次に見る</b><span>${escapeHtml(c.watch)}</span></div></div></div>
       <div class="bottom"><div class="small">${s.memo?escapeHtml(s.memo):s.updatedAt?`更新 ${new Date(s.updatedAt).toLocaleString("ja-JP")}`:""}</div><div class="card-actions"><button class="edit" data-edit="${i}">編集</button><button class="delete" data-del="${i}">削除</button></div></div>
     </article>`;
@@ -126,6 +127,7 @@ async function refreshOne(s){
   s.currentPriceJPY=q.priceJPY;
   s.dayChangePct=Number.isFinite(q.dayChangePct)?q.dayChangePct:null;
   try{const fr=await fetch(`/api/fundamentals?symbol=${encodeURIComponent(s.symbol)}&market=${s.market}`);if(fr.ok)s.fundamentals=await fr.json()}catch(e){}
+  try{const nr=await fetch(`/api/news?symbol=${encodeURIComponent(s.symbol)}`);if(nr.ok){const nd=await nr.json();s.news=nd.items||[]}}catch(e){}
   s.updatedAt=Date.now();
   return s;
 }

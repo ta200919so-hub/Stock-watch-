@@ -1,4 +1,5 @@
 const KEY="stock-watch-ai-v1";
+const BACKUP_KEY="stock-watch-ai-backup-v1";
 let filter="ALL";
 let searchTimer=null;
 const $=s=>document.querySelector(s);
@@ -15,16 +16,9 @@ function migrate(s){
     view:s.view||"—", ai:s.ai||"", updatedAt:null, legacy:true
   };
 }
-function readStocks(){
-  try{
-    const raw=localStorage.getItem(KEY);
-    if(raw){const parsed=JSON.parse(raw);if(Array.isArray(parsed)&&parsed.length)return parsed.map(migrate)}
-    for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||k===KEY)continue;try{const v=JSON.parse(localStorage.getItem(k));if(Array.isArray(v)&&v.length&&v.some(x=>x&&(x.symbol||x.ticker||x.purchasePriceJPY||x.start)))return v.map(migrate)}catch{}}
-  }catch{}
-  return [];
-}
+function readStocks(){try{const p=JSON.parse(localStorage.getItem(KEY)||"null"),b=JSON.parse(localStorage.getItem(BACKUP_KEY)||"null");const v=Array.isArray(p)&&p.length?p:Array.isArray(b)&&b.length?b:[];return v.map(migrate)}catch{return []}}
 let stocks=readStocks();
-function save(){if(!Array.isArray(stocks)||!stocks.length)return;localStorage.setItem(KEY,JSON.stringify(stocks))}
+function save(){if(!stocks.length)return;const data=JSON.stringify(stocks);localStorage.setItem(KEY,data);localStorage.setItem(BACKUP_KEY,data)}
 function pnlPct(s){
   if(!s.shares||!s.purchasePriceJPY||!s.currentPriceJPY)return null;
   return (s.currentPriceJPY/s.purchasePriceJPY-1)*100;
@@ -236,24 +230,9 @@ $("#list").addEventListener("click",e=>{
   const b=e.target.closest("[data-del]");if(b){if(confirm("この銘柄を削除しますか？")){stocks.splice(Number(b.dataset.del),1);save();render()}return}
   const card=e.target.closest("[data-detail]");if(card)renderDetail(Number(card.dataset.detail));
 });
-$("#backHome").addEventListener("click",()=>{$("#detailView").hidden=true;$("#searchView").hidden=false;$("#navSearch").classList.add("active");$("#navPortfolio").classList.remove("active");window.scrollTo(0,0)});
+$("#backHome").addEventListener("click",()=>{$("#detailView").hidden=true;$("#homeView").hidden=false;window.scrollTo(0,0)});
 $("#closeEdit").addEventListener("click",()=>$("#editDialog").close());
 $("#editForm").addEventListener("submit",e=>{e.preventDefault();const i=Number($("#editIndex").value),s=stocks[i];if(!s)return;s.purchasePriceJPY=Number($("#editPurchasePrice").value);s.shares=Number($("#editShares").value);s.purchaseDate=$("#editPurchaseDate").value;s.memo=$("#editMemo").value.trim();save();render();$("#editDialog").close();status("保有情報を更新しました。","ok");setTimeout(()=>status(""),2000)});
-
-let globalSearchTimer=null;
-async function globalSearch(){
- const q=$("#globalSearch").value.trim(),box=$("#globalSuggestions");if(!q){box.innerHTML="";return}
- let all=[];
- for(const market of ["JP","US"]){try{const r=await fetch(`/api/search?q=${encodeURIComponent(q)}&market=${market}`);if(r.ok){const d=await r.json();all.push(...(d.results||[]).map(x=>({...x,market}));}}catch{}}
- const seen=new Set();all=all.filter(x=>!seen.has(x.symbol)&&(seen.add(x.symbol),true)).slice(0,10);
- box.innerHTML=all.length?all.map(x=>`<button type="button" class="suggestion global-result" data-symbol="${escapeHtml(x.symbol)}" data-name="${escapeHtml(x.name)}" data-market="${x.market}"><strong>${escapeHtml(x.name)}</strong><span>${x.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"} · ${escapeHtml(x.symbol)}</span></button>`).join(""):'<div class="no-result">候補が見つかりません</div>';
-}
-function showTab(tab){$("#homeView").hidden=tab!=="portfolio";$("#searchView").hidden=tab!=="search";$("#detailView").hidden=true;$("#navPortfolio").classList.toggle("active",tab==="portfolio");$("#navSearch").classList.toggle("active",tab==="search");window.scrollTo(0,0)}
-$("#navPortfolio").addEventListener("click",()=>showTab("portfolio"));
-$("#navSearch").addEventListener("click",()=>showTab("search"));
-$("#globalSearch").addEventListener("input",()=>{clearTimeout(globalSearchTimer);globalSearchTimer=setTimeout(globalSearch,300)});
-$("#globalSuggestions").addEventListener("click",async e=>{const b=e.target.closest(".global-result");if(!b)return;const temp={market:b.dataset.market,name:b.dataset.name,symbol:b.dataset.symbol,purchasePriceJPY:0,shares:null,currentPriceJPY:0,updatedAt:null};status("");try{await refreshOne(temp);stocks.push(temp);renderDetail(stocks.length-1);stocks.pop()}catch{alert("分析データを取得できませんでした。")}})
-
 $("#refreshBtn").addEventListener("click",refreshAll);
 
 if("serviceWorker"in navigator){

@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=3.1" />
+  <link rel="stylesheet" href="style.css?v=3.2" />
   <title>Stock Watch AI</title>
 </head>
 <body>
@@ -32,6 +32,8 @@
 
     <section class="portfolio-panel"><div class="section-head"><div><p class="eyebrow">ALLOCATION</p><h2>ポートフォリオ</h2></div><span id="holdingCount" class="muted"></span></div><div class="allocation"><div id="donut" class="donut"><div class="donut-center"><strong id="donutTotal">¥0</strong><span>評価額</span></div></div><div id="legend" class="legend"></div></div><div id="concentration" class="insight">保有データが揃うと構成比を分析します。</div></section>
 
+    <section class="recommend-panel"><div class="section-head"><div><p class="eyebrow">AI WATCHLIST</p><h2>AIおすすめ候補</h2></div><span class="muted">分散重視</span></div><div id="recommendations" class="recommendations"></div></section>
+
     <section class="toolbar">
       <button class="filter active" data-filter="ALL">すべて</button>
       <button class="filter" data-filter="JP">🇯🇵 日本</button>
@@ -42,7 +44,7 @@
     <section id="list" class="list"></section>
     <button id="openAdd" class="fab">＋ 保有銘柄を追加</button>
 
-    <section class="roadmap"><strong>AI見通し v3.1</strong><p>購入単価・現在値・前日比から短期/中期の見方、リスク、次に見るポイントを表示します。決算・ニュース・バリュエーション連携は次段階で追加します。</p></section>
+    <section class="roadmap"><strong>AI分析 v3.2</strong><p>保有損益・前日比・ポートフォリオ構成から銘柄スコアと分散候補を表示します。決算・ニュース・PERのリアルタイム連携は次段階で追加します。</p></section>
 
     <section class="notice">
       <strong>株価・AI見通しについて</strong>
@@ -79,6 +81,6 @@
 
   <dialog id="editDialog"><form id="editForm"><div class="dialog-head"><h2>保有情報を編集</h2><button type="button" id="closeEdit" class="icon-btn">×</button></div><input id="editIndex" type="hidden" /><div id="editStockName" class="edit-stock-name"></div><label>買った時の1株価格（円）<input id="editPurchasePrice" type="number" min="0.01" step="0.01" required inputmode="decimal" /></label><label>保有株数<input id="editShares" type="number" min="0.0001" step="0.0001" required inputmode="decimal" /></label><label>購入日（任意）<input id="editPurchaseDate" type="date" /></label><label>メモ（任意）<input id="editMemo" /></label><button class="primary" type="submit">変更を保存</button></form></dialog>
 
-  <script src="app.js?v=3.1"></script>
+  <script src="app.js?v=3.2"></script>
 </body>
 </html>

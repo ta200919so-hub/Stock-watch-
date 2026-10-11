@@ -16,9 +16,28 @@ function migrate(s){
     view:s.view||"—", ai:s.ai||"", updatedAt:null, legacy:true
   };
 }
-function readStocks(){try{const p=JSON.parse(localStorage.getItem(KEY)||"null"),b=JSON.parse(localStorage.getItem(BACKUP_KEY)||"null");const v=Array.isArray(p)&&p.length?p:Array.isArray(b)&&b.length?b:[];return v.map(migrate)}catch{return []}}
+function readStocks(){
+  for(const key of [KEY,BACKUP_KEY]){
+    try{
+      const raw=localStorage.getItem(key);
+      if(raw===null)continue;
+      const parsed=JSON.parse(raw);
+      if(Array.isArray(parsed))return parsed.map(migrate);
+    }catch(e){console.warn("Portfolio recovery failed for",key,e)}
+  }
+  return [];
+}
 let stocks=readStocks();
-function save(){if(!stocks.length)return;const data=JSON.stringify(stocks);localStorage.setItem(KEY,data);localStorage.setItem(BACKUP_KEY,data)}
+function save(){
+  try{
+    const previous=localStorage.getItem(KEY);
+    if(previous!==null){
+      try{if(Array.isArray(JSON.parse(previous)))localStorage.setItem(BACKUP_KEY,previous)}catch{}
+    }
+    localStorage.setItem(KEY,JSON.stringify(stocks));
+    return true;
+  }catch(e){console.error("Portfolio save failed",e);alert("保有データを保存できませんでした。端末の空き容量とブラウザ設定を確認してください。");return false}
+}
 function pnlPct(s){
   if(!s.shares||!s.purchasePriceJPY||!s.currentPriceJPY)return null;
   return (s.currentPriceJPY/s.purchasePriceJPY-1)*100;
@@ -227,22 +246,22 @@ $("#addForm").addEventListener("submit",async e=>{
 $("#list").addEventListener("click",e=>{
   const edit=e.target.closest("[data-edit]");
   if(edit){const i=Number(edit.dataset.edit),s=stocks[i];$("#editIndex").value=i;$("#editStockName").textContent=displayName(s);$("#editPurchasePrice").value=s.purchasePriceJPY||"";$("#editShares").value=s.shares||"";$("#editPurchaseDate").value=s.purchaseDate||"";$("#editMemo").value=s.memo||"";$("#editDialog").showModal();return}
-  const b=e.target.closest("[data-del]");if(b){if(confirm("この銘柄を削除しますか？")){stocks.splice(Number(b.dataset.del),1);save();render()}return}
+  const b=e.target.closest("[data-del]");if(b){if(confirm("この銘柄を削除しますか？")){const old=stocks.slice();stocks.splice(Number(b.dataset.del),1);if(!save())stocks=old;render()}return}
   const card=e.target.closest("[data-detail]");if(card)renderDetail(Number(card.dataset.detail));
 });
-$("#backHome").addEventListener("click",()=>{$("#detailView").hidden=true;const sv=$("#searchView");if(sv&&$("#globalSearch")?.value){sv.hidden=false}else{$("#homeView").hidden=false}window.scrollTo(0,0)});
+$("#backHome").addEventListener("click",()=>{$("#detailView").hidden=true;const sv=$("#searchView");if(sv&&!sv.hidden){sv.hidden=false}else{$("#homeView").hidden=false}window.scrollTo(0,0)});
 $("#closeEdit").addEventListener("click",()=>$("#editDialog").close());
 $("#editForm").addEventListener("submit",e=>{e.preventDefault();const i=Number($("#editIndex").value),s=stocks[i];if(!s)return;s.purchasePriceJPY=Number($("#editPurchasePrice").value);s.shares=Number($("#editShares").value);s.purchaseDate=$("#editPurchaseDate").value;s.memo=$("#editMemo").value.trim();save();render();$("#editDialog").close();status("保有情報を更新しました。","ok");setTimeout(()=>status(""),2000)});
 
-let globalSearchTimer=null;
+let globalSearchTimer=null;let globalSearchRequestId=0;
 function showSearch(){const v=$("#searchView");if(!v)return;$("#homeView").hidden=true;$("#detailView").hidden=true;v.hidden=false;window.scrollTo(0,0);setTimeout(()=>$("#globalSearch")?.focus(),50)}
-function closeSearch(){const v=$("#searchView");if(v)v.hidden=true;$("#detailView").hidden=true;$("#homeView").hidden=false;window.scrollTo(0,0)}
+function closeSearch(){globalSearchRequestId++;const v=$("#searchView");if(v)v.hidden=true;$("#detailView").hidden=true;$("#homeView").hidden=false;window.scrollTo(0,0)}
 async function globalSearch(){
- const input=$("#globalSearch"),box=$("#globalSuggestions");if(!input||!box)return;const q=input.value.trim();if(!q){box.innerHTML="";return}
+ const input=$("#globalSearch"),box=$("#globalSuggestions");if(!input||!box)return;const q=input.value.trim();const requestId=++globalSearchRequestId;if(!q){box.innerHTML="";return}
  let all=[];
  for(const market of ["JP","US"]){try{const r=await fetch(`/api/search?q=${encodeURIComponent(q)}&market=${market}`);if(r.ok){const d=await r.json();all.push(...(d.results||[]).map(x=>({...x,market})))}}catch{}}
  const seen=new Set();all=all.filter(x=>x.symbol&&!seen.has(x.symbol)&&(seen.add(x.symbol),true)).slice(0,10);
- box.innerHTML=all.length?all.map(x=>`<button type="button" class="suggestion global-result" data-symbol="${escapeHtml(x.symbol)}" data-name="${escapeHtml(x.name)}" data-market="${x.market}"><strong>${escapeHtml(x.name)}</strong><span>${x.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"} · ${escapeHtml(x.symbol)}</span></button>`).join(""):'<div class="no-result">候補が見つかりません</div>';
+ if(requestId!==globalSearchRequestId)return;box.innerHTML=all.length?all.map(x=>`<button type="button" class="suggestion global-result" data-symbol="${escapeHtml(x.symbol)}" data-name="${escapeHtml(x.name)}" data-market="${x.market}"><strong>${escapeHtml(x.name)}</strong><span>${x.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"} · ${escapeHtml(x.symbol)}</span></button>`).join(""):'<div class="no-result">候補が見つかりません</div>';
 }
 async function renderExternalDetail(temp){
  const c=autoComment(temp),f=temp.fundamentals||{};$("#detailTitle").textContent=displayName(temp);$("#detailPrice").textContent=temp.currentPriceJPY?yen(temp.currentPriceJPY):"—";
@@ -259,5 +278,5 @@ $("#refreshBtn").addEventListener("click",refreshAll);
 if("serviceWorker"in navigator){
   navigator.serviceWorker.register("./sw.js").then(reg=>reg.update()).catch(()=>{});
 }
-if(stocks.length)save();render();
+render();
 setTimeout(()=>{if(stocks.some(s=>s.symbol))refreshAll()},500);

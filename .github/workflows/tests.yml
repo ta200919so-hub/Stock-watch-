@@ -1,0 +1,29 @@
+name: Stock Watch AI checks
+on:
+  pull_request:
+    paths:
+      - "app.js"
+      - "api/**"
+      - "tests/**"
+      - ".github/workflows/tests.yml"
+  push:
+    branches:
+      - "feat/safe-storage-search-20261011"
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: JavaScript syntax
+        run: |
+          node --check app.js
+          node --check api/search.js
+          node --check api/history.js
+          node --check sw.js
+      - name: Regression tests
+        run: node --test tests/*.test.mjs

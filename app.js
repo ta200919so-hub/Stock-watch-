@@ -141,6 +141,7 @@ function renderDetail(i){
     <section class="detail-section"><h3>決算分析</h3><div class="fundamentals detail-metrics"><div><span>次回決算</span><strong>${Number.isFinite(f.nextEarningsDate)?new Date(f.nextEarningsDate*1000).toLocaleDateString("ja-JP"):"—"}</strong></div><div><span>四半期売上</span><strong>${Number.isFinite(f.quarterRevenue)?new Intl.NumberFormat("ja-JP",{notation:"compact",maximumFractionDigits:1}).format(f.quarterRevenue):"—"}</strong></div><div><span>売上 前年比</span><strong>${Number.isFinite(f.quarterRevenueGrowth)?(f.quarterRevenueGrowth>=0?"+":"")+(f.quarterRevenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>営業利益</span><strong>${Number.isFinite(f.quarterOperatingIncome)?new Intl.NumberFormat("ja-JP",{notation:"compact",maximumFractionDigits:1}).format(f.quarterOperatingIncome):"—"}</strong></div><div><span>営業利益 前年比</span><strong>${Number.isFinite(f.quarterOperatingIncomeGrowth)?(f.quarterOperatingIncomeGrowth>=0?"+":"")+(f.quarterOperatingIncomeGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>EPSサプライズ</span><strong>${Number.isFinite(f.earningsSurprisePct)?(f.earningsSurprisePct>=0?"+":"")+(f.earningsSurprisePct*100).toFixed(1)+"%":"—"}</strong></div></div><p class="muted">最新四半期と前年同期を比較。取得できない項目は — 表示。</p></section><section class="detail-section"><h3>企業指標</h3><div class="fundamentals detail-metrics"><div><span>PER</span><strong>${Number.isFinite(f.trailingPE)?f.trailingPE.toFixed(1)+"倍":"—"}</strong></div><div><span>予想PER</span><strong>${Number.isFinite(f.forwardPE)?f.forwardPE.toFixed(1)+"倍":"—"}</strong></div><div><span>売上成長</span><strong>${Number.isFinite(f.revenueGrowth)?(f.revenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益率</span><strong>${Number.isFinite(f.profitMargin)?(f.profitMargin*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益成長</span><strong>${Number.isFinite(f.earningsGrowth)?(f.earningsGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>目標株価</span><strong>${Number.isFinite(f.targetMeanPriceJPY)?yen(f.targetMeanPriceJPY):"—"}</strong></div></div></section>
     <section class="detail-section"><h3>注目テーマ</h3><div class="evidence">${companyThemes(s).map(x=>`<span>${escapeHtml(x)}</span>`).join("")}</div></section><section class="detail-section"><h3>AI見通し</h3><div class="ai outlook"><div class="ai-head"><span class="badge">${escapeHtml(c.view)}</span><span class="badge">データ信頼度 ${c.quality}</span></div><div class="evidence">${c.evidence.length?c.evidence.map(x=>`<span>${escapeHtml(x)}</span>`).join(""):'<span>取得データ待ち</span>'}</div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>基本</b><span>${escapeHtml(c.base)}</span></div><div><b>強気</b><span>${escapeHtml(c.bull)}</span></div><div><b>弱気</b><span>${escapeHtml(c.bear)}</span></div><div><b>変更条件</b><span>${escapeHtml(c.change)}</span></div></div></div></section>
     <section class="detail-section"><h3>最新ニュース</h3>${s.news?.length?`<div class="news-box">${s.news.slice(0,5).map(n=>`<a class="news-item" href="${escapeHtml(n.url||"#")}" target="_blank" rel="noopener"><div><span class="impact ${n.impact}">${n.impact==="positive"?"好材料":n.impact==="negative"?"悪材料":"中立"}</span><small>${escapeHtml(n.publisher||"News")}</small></div><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.reason)}</p></a>`).join("")}</div>`:'<p class="muted">ニュースデータ待ち</p>'}</section>`;
+  showAnalytics(s);
   $("#homeView").hidden=true;$("#detailView").hidden=false;window.scrollTo(0,0);
 }
 function render(){
@@ -266,6 +267,8 @@ async function globalSearch(){
 async function renderExternalDetail(temp){
  const c=autoComment(temp),f=temp.fundamentals||{};$("#detailTitle").textContent=displayName(temp);$("#detailPrice").textContent=temp.currentPriceJPY?yen(temp.currentPriceJPY):"—";
  $("#detailBody").innerHTML=`<section class="detail-section"><h3>企業指標</h3><div class="fundamentals detail-metrics"><div><span>PER</span><strong>${Number.isFinite(f.trailingPE)?f.trailingPE.toFixed(1)+"倍":"—"}</strong></div><div><span>予想PER</span><strong>${Number.isFinite(f.forwardPE)?f.forwardPE.toFixed(1)+"倍":"—"}</strong></div><div><span>売上成長</span><strong>${Number.isFinite(f.revenueGrowth)?(f.revenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益率</span><strong>${Number.isFinite(f.profitMargin)?(f.profitMargin*100).toFixed(1)+"%":"—"}</strong></div></div></section><section class="detail-section"><h3>AI見通し</h3><div class="ai outlook"><div class="ai-head"><span class="badge">${escapeHtml(c.view)}</span><span class="badge">データ信頼度 ${c.quality}</span></div><div class="evidence">${c.evidence.map(x=>`<span>${escapeHtml(x)}</span>`).join("")}</div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>基本</b><span>${escapeHtml(c.base)}</span></div><div><b>強気</b><span>${escapeHtml(c.bull)}</span></div><div><b>弱気</b><span>${escapeHtml(c.bear)}</span></div></div></div></section>`;
+ showAnalytics(temp);
+ showAnalytics(temp);
  $("#searchView").hidden=true;$("#homeView").hidden=true;$("#detailView").hidden=false;window.scrollTo(0,0);
 }
 $("#openSearch")?.addEventListener("click",showSearch);
@@ -280,3 +283,36 @@ if("serviceWorker"in navigator){
 }
 render();
 setTimeout(()=>{if(stocks.some(s=>s.symbol))refreshAll()},500);
+
+const PEERS={"AMAT":["LRCX","KLAC","ASML"],"NVDA":["AMD","AVGO","INTC"],"8035.T":["6857.T","6920.T","7735.T"],"7203.T":["7267.T","7201.T"],"7011.T":["7012.T","7013.T"],"7012.T":["7011.T","7013.T"],"7974.T":["6758.T","7832.T"],"2802.T":["2914.T","2801.T"],"8001.T":["8058.T","8031.T"],"QCOM":["AVGO","TXN","NVDA"]};
+let analyticsRequest=0;
+function showAnalytics(s){
+ const token=++analyticsRequest;
+ const container=document.createElement("section");container.className="detail-section";
+ container.innerHTML='<h3>株価推移</h3><div class="period-buttons"><button data-range="1mo">1か月</button><button data-range="3mo">3か月</button><button data-range="1y">1年</button><button data-range="5y">5年</button></div><div class="history-chart muted">株価データを読み込み中…</div><h3>競合比較</h3><div class="peer-comparison muted">競合銘柄を読み込み中…</div>';
+ $("#detailBody").prepend(container);
+ async function history(range){
+   const target=container.querySelector(".history-chart");target.textContent="読み込み中…";
+   const seq=++analyticsRequest;
+   try{
+     const r=await fetchTimeout("/api/history?symbol="+encodeURIComponent(s.symbol)+"&market="+s.market+"&range="+range,12000);
+     if(!r.ok)throw Error("history");const data=await r.json();
+     if(seq!==analyticsRequest||!container.isConnected)return;
+     const points=data.points||[];if(points.length<2)throw Error("empty");
+     const values=points.map(x=>x.priceJPY),min=Math.min(...values),max=Math.max(...values),spread=max-min||1;
+     const coords=points.map((p,i)=>((i/(points.length-1))*100).toFixed(2)+","+((1-(p.priceJPY-min)/spread)*80+10).toFixed(2)).join(" ");
+     target.innerHTML='<svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="株価折れ線チャート"><polyline points="'+coords+'" fill="none" stroke="#7c8cff" stroke-width="2" vector-effect="non-scaling-stroke"/></svg><div class="chart-labels"><span>'+escapeHtml(points[0].date)+'</span><span>'+yen(values[values.length-1])+'（最新）</span><span>'+escapeHtml(points[points.length-1].date)+'</span></div>';
+   }catch{if(seq===analyticsRequest)target.textContent="株価推移を取得できませんでした。"}
+ }
+ container.querySelectorAll("[data-range]").forEach(b=>b.addEventListener("click",()=>history(b.dataset.range)));
+ history("1mo");
+ const peers=PEERS[s.symbol]||[];
+ const target=container.querySelector(".peer-comparison");
+ if(!peers.length){target.textContent="この銘柄の比較候補はまだ登録されていません。";return}
+ Promise.all(peers.map(async symbol=>{
+   try{const market=symbol.endsWith(".T")?"JP":"US";const r=await fetchTimeout("/api/quote?symbol="+encodeURIComponent(symbol)+"&market="+market,10000);if(!r.ok)throw Error();return {symbol,...await r.json()}}catch{return {symbol}}
+ })).then(rows=>{
+   if(!container.isConnected)return;
+   target.innerHTML='<p class="muted">参考比較（株価・前日比）。株価の絶対値は企業間の割安度を示しません。</p>'+rows.map(x=>'<div class="peer-row"><strong>'+escapeHtml(x.symbol)+'</strong><span>'+(Number.isFinite(x.priceJPY)?yen(x.priceJPY):"取得不可")+'</span><span>'+(Number.isFinite(x.dayChangePct)?x.dayChangePct.toFixed(2)+"%":"—")+'</span></div>').join("");
+ });
+}

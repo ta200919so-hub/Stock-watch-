@@ -1,0 +1,19 @@
+const ALLOWED=new Set(["1mo","3mo","1y","5y"]);
+async function getChart(symbol,range){
+ const url="https://query1.finance.yahoo.com/v8/finance/chart/"+encodeURIComponent(symbol)+"?interval=1d&range="+range;
+ const r=await fetch(url,{headers:{"User-Agent":"Mozilla/5.0"}});if(!r.ok)throw Error("upstream");
+ const j=await r.json();const result=j.chart?.result?.[0];if(!result)throw Error("empty");
+ return (result.timestamp||[]).map((t,i)=>({date:new Date(t*1000).toISOString().slice(0,10),price:result.indicators?.quote?.[0]?.close?.[i]})).filter(x=>Number.isFinite(x.price)&&x.price>0);
+}
+export default async function handler(req,res){
+ const symbol=String(req.query.symbol||"").trim().toUpperCase(),market=String(req.query.market||"JP"),range=String(req.query.range||"1mo");
+ if(!/^[A-Z0-9.^=-]{1,20}$/.test(symbol)||!ALLOWED.has(range)||!["JP","US"].includes(market))return res.status(400).json({error:"invalid_request"});
+ try{
+   const [points,fx]=await Promise.all([getChart(symbol,range),market==="US"?getChart("JPY=X",range):Promise.resolve([])]);
+   if(!points.length)throw Error("empty");
+   let lastFx=fx[0]?.price||1;let fi=0;
+   const converted=points.map(p=>{while(fi<fx.length&&fx[fi].date<=p.date){lastFx=fx[fi].price;fi++}return {date:p.date,priceJPY:Math.round(p.price*lastFx*100)/100}});
+   res.setHeader("Cache-Control","s-maxage=300, stale-while-revalidate=600");
+   return res.status(200).json({symbol,range,points:converted});
+ }catch{return res.status(502).json({error:"history_unavailable",points:[]})}
+}

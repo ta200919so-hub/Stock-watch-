@@ -268,7 +268,6 @@ async function renderExternalDetail(temp){
  const c=autoComment(temp),f=temp.fundamentals||{};$("#detailTitle").textContent=displayName(temp);$("#detailPrice").textContent=temp.currentPriceJPY?yen(temp.currentPriceJPY):"—";
  $("#detailBody").innerHTML=`<section class="detail-section"><h3>企業指標</h3><div class="fundamentals detail-metrics"><div><span>PER</span><strong>${Number.isFinite(f.trailingPE)?f.trailingPE.toFixed(1)+"倍":"—"}</strong></div><div><span>予想PER</span><strong>${Number.isFinite(f.forwardPE)?f.forwardPE.toFixed(1)+"倍":"—"}</strong></div><div><span>売上成長</span><strong>${Number.isFinite(f.revenueGrowth)?(f.revenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益率</span><strong>${Number.isFinite(f.profitMargin)?(f.profitMargin*100).toFixed(1)+"%":"—"}</strong></div></div></section><section class="detail-section"><h3>AI見通し</h3><div class="ai outlook"><div class="ai-head"><span class="badge">${escapeHtml(c.view)}</span><span class="badge">データ信頼度 ${c.quality}</span></div><div class="evidence">${c.evidence.map(x=>`<span>${escapeHtml(x)}</span>`).join("")}</div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>基本</b><span>${escapeHtml(c.base)}</span></div><div><b>強気</b><span>${escapeHtml(c.bull)}</span></div><div><b>弱気</b><span>${escapeHtml(c.bear)}</span></div></div></div></section>`;
  showAnalytics(temp);
- showAnalytics(temp);
  $("#searchView").hidden=true;$("#homeView").hidden=true;$("#detailView").hidden=false;window.scrollTo(0,0);
 }
 $("#openSearch")?.addEventListener("click",showSearch);

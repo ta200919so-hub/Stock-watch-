@@ -22,9 +22,9 @@ function boot(storage={},failPrimary=false,request){
   querySelectorAll(){return []},createElement(){return element()}};
  const localStorage={getItem(key){return map.has(key)?map.get(key):null},
   setItem(key,value){if(failPrimary&&key===KEY)throw Error("storage full");map.set(key,String(value))}};
- const fetch=request||async url=>({ok:true,json:async()=>url.startsWith("/api/quote")?
+ const fetch=request||(async url=>({ok:true,json:async()=>url.startsWith("/api/quote")?
    {priceJPY:200,dayChangePct:1}:url.startsWith("/api/search")?{results:[]}:url.startsWith("/api/history")?
-   {points:[{date:"2026-10-01",priceJPY:100},{date:"2026-10-02",priceJPY:110}]}:{items:[]}});
+   {points:[{date:"2026-10-01",priceJPY:100},{date:"2026-10-02",priceJPY:110}]}:{items:[]}}));
  const context={document,localStorage,navigator:{},window:{scrollTo(){}},fetch,
   setTimeout(){return 0},clearTimeout(){},alert(x){alerts.push(x)},confirm(){return true},
   console:{warn(){},error(){}},AbortController,Intl,Date,Number,Math,Set,Promise,JSON,Array,String};

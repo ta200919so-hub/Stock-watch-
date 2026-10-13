@@ -3,6 +3,11 @@ on:
   pull_request:
     paths:
       - "app.js"
+      - "sw.js"
+      - "index.html"
+      - "manifest.webmanifest"
+      - "style.css"
+      - "icon.svg"
       - "api/**"
       - "tests/**"
       - ".github/workflows/tests.yml"

@@ -38,8 +38,8 @@ function api(source,fetch){
  return vm.runInContext(source.replace("export default async function handler","async function handler")+"\nhandler",context);
 }
 function response(){return {code:0,headers:{},status(code){this.code=code;return this},setHeader(k,v){this.headers[k]=v},json(data){this.body=data;return this}}}
-function chart(prices){
- return {chart:{result:[{timestamp:prices.map((_,i)=>Date.UTC(2026,9,1+i)/1000),
+function chart(prices,currency="JPY"){
+ return {chart:{result:[{meta:{currency},timestamp:prices.map((_,i)=>Date.UTC(2026,9,1+i)/1000),
   indicators:{quote:[{close:prices}]}}]}};
 }
 test("recovers valid backup when primary JSON is corrupt",()=>{
@@ -88,7 +88,7 @@ test("history endpoint returns dated Japanese yen points",async()=>{
  assert.equal(r.code,200);assert.equal(r.body.points.length,2);assert.equal(r.body.points[1].priceJPY,110);
 });
 test("USD chart fails safely when FX data is unavailable",async()=>{
- const handler=api(HISTORY,async url=>({ok:true,json:async()=>url.includes("JPY%3DX")?chart([]):chart([100,110])}));
+ const handler=api(HISTORY,async url=>({ok:true,json:async()=>url.includes("JPY%3DX")?chart([]):chart([100,110],"USD")}));
  const r=response();await handler({query:{symbol:"AMAT",market:"US",range:"1mo"}},r);
  assert.equal(r.code,502);
 });

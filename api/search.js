@@ -6,6 +6,9 @@ export default async function handler(req, res) {
   const market = String(req.query.market || "JP");
   const alias=Object.entries(ALIASES).find(([name])=>normalize(q)===normalize(name));
   const lookup=alias?alias[1]:q;
+  const normalized=normalize(q);
+  const knownSymbol=alias?.[1] || Object.keys(JA_NAMES).find(s=>normalize(s)===normalized || normalize(JA_NAMES[s])===normalized || (s.endsWith(".T")&&normalize(s.slice(0,-2))===normalized));
+  const matchesMarket=s=>market==="JP"?s.endsWith(".T"):market==="US"?!s.includes("."):false;
 
   if (!q) {
     return res.status(200).json({ results: [] });
@@ -43,7 +46,7 @@ export default async function handler(req, res) {
       );
     }
 
-    if(alias&&((market==="JP")===alias[1].endsWith(".T"))&&!results.some(x=>x.symbol===alias[1]))results.unshift({symbol:alias[1],quoteType:"EQUITY"});
+    if(knownSymbol&&matchesMarket(knownSymbol)&&!results.some(x=>x.symbol===knownSymbol))results.unshift({symbol:knownSymbol,quoteType:"EQUITY"});
     results = results.slice(0, 8).map((x) => ({
       symbol: x.symbol,
       name: JA_NAMES[x.symbol] || x.longname || x.shortname || x.symbol
@@ -57,6 +60,10 @@ export default async function handler(req, res) {
     return res.status(200).json({ results });
 
   } catch (e) {
+    if(knownSymbol&&matchesMarket(knownSymbol)){
+      res.setHeader("Cache-Control","no-store");
+      return res.status(200).json({results:[{symbol:knownSymbol,name:JA_NAMES[knownSymbol]||knownSymbol}],degraded:true});
+    }
     return res.status(502).json({
       error: "search_failed",
       results: []

@@ -3,7 +3,15 @@ async function getChart(symbol,range){
  const url="https://query1.finance.yahoo.com/v8/finance/chart/"+encodeURIComponent(symbol)+"?interval=1d&range="+range;
  const r=await fetch(url,{headers:{"User-Agent":"Mozilla/5.0"}});if(!r.ok)throw Error("upstream");
  const j=await r.json();const result=j.chart?.result?.[0];if(!result)throw Error("empty");
- const points=(result.timestamp||[]).map((t,i)=>({date:new Date(t*1000).toISOString().slice(0,10),price:result.indicators?.quote?.[0]?.close?.[i]})).filter(x=>Number.isFinite(x.price)&&x.price>0).sort((a,b)=>a.date.localeCompare(b.date));
+ const byDate=new Map();
+ for(const [i,t] of (result.timestamp||[]).entries()){
+   const price=result.indicators?.quote?.[0]?.close?.[i];
+   if(!Number.isFinite(t)||!Number.isFinite(price)||price<=0)continue;
+   const dateObj=new Date(t*1000);
+   if(!Number.isFinite(dateObj.getTime()))continue;
+   byDate.set(dateObj.toISOString().slice(0,10),price);
+ }
+ const points=[...byDate].map(([date,price])=>({date,price})).sort((a,b)=>a.date.localeCompare(b.date));
  return {points,currency:result.meta?.currency||null};
 }
 export default async function handler(req,res){

@@ -4,6 +4,7 @@ function normalize(s){return String(s).normalize("NFKC").toLowerCase().replace(/
 export default async function handler(req, res) {
   const q = String(req.query.q || "").trim();
   const market = String(req.query.market || "JP");
+  if (market !== "JP" && market !== "US") return res.status(400).json({error:"invalid_market",results:[]});
   const alias=Object.entries(ALIASES).find(([name])=>normalize(q)===normalize(name));
   const lookup=alias?alias[1]:q;
   const normalized=normalize(q);

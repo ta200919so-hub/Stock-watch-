@@ -2,6 +2,7 @@ const KEY="stock-watch-ai-v1";
 const BACKUP_KEY="stock-watch-ai-backup-v1";
 let filter="ALL";
 let searchTimer=null;
+let detailFromSearch=false;
 const $=s=>document.querySelector(s);
 const yen=n=>"¥"+new Intl.NumberFormat("ja-JP",{maximumFractionDigits:0}).format(Number(n)||0);
 const num=n=>new Intl.NumberFormat("ja-JP",{maximumFractionDigits:4}).format(Number(n)||0);
@@ -16,9 +17,28 @@ function migrate(s){
     view:s.view||"—", ai:s.ai||"", updatedAt:null, legacy:true
   };
 }
-function readStocks(){try{const p=JSON.parse(localStorage.getItem(KEY)||"null"),b=JSON.parse(localStorage.getItem(BACKUP_KEY)||"null");const v=Array.isArray(p)&&p.length?p:Array.isArray(b)&&b.length?b:[];return v.map(migrate)}catch{return []}}
+function readStocks(){
+  for(const key of [KEY,BACKUP_KEY]){
+    try{
+      const raw=localStorage.getItem(key);
+      if(raw===null)continue;
+      const parsed=JSON.parse(raw);
+      if(Array.isArray(parsed)){if(parsed.length===0)return [];const valid=parsed.filter(x=>x!==null&&typeof x==="object"&&!Array.isArray(x));if(valid.length)return valid.map(migrate);}
+    }catch(e){console.warn("Portfolio recovery failed for",key,e)}
+  }
+  return [];
+}
 let stocks=readStocks();
-function save(){if(!stocks.length)return;const data=JSON.stringify(stocks);localStorage.setItem(KEY,data);localStorage.setItem(BACKUP_KEY,data)}
+function save(){
+  try{
+    const previous=localStorage.getItem(KEY);
+    if(previous!==null){
+      try{if(Array.isArray(JSON.parse(previous)))localStorage.setItem(BACKUP_KEY,previous)}catch{}
+    }
+    localStorage.setItem(KEY,JSON.stringify(stocks));
+    return true;
+  }catch(e){console.error("Portfolio save failed",e);alert("保有データを保存できませんでした。端末の空き容量とブラウザ設定を確認してください。");return false}
+}
 function pnlPct(s){
   if(!s.shares||!s.purchasePriceJPY||!s.currentPriceJPY)return null;
   return (s.currentPriceJPY/s.purchasePriceJPY-1)*100;
@@ -115,6 +135,7 @@ function portfolio(){
   return {cost,value,pnl:value-cost,pct:cost?((value/cost)-1)*100:null};
 }
 function renderDetail(i){
+  detailFromSearch=false;
   const s=stocks[i];if(!s)return;const c=autoComment(s),dec=decision(s),f=s.fundamentals||{};
   $("#detailTitle").textContent=displayName(s);$("#detailPrice").textContent=s.currentPriceJPY?yen(s.currentPriceJPY):"—";
   $("#detailBody").innerHTML=`
@@ -122,6 +143,7 @@ function renderDetail(i){
     <section class="detail-section"><h3>決算分析</h3><div class="fundamentals detail-metrics"><div><span>次回決算</span><strong>${Number.isFinite(f.nextEarningsDate)?new Date(f.nextEarningsDate*1000).toLocaleDateString("ja-JP"):"—"}</strong></div><div><span>四半期売上</span><strong>${Number.isFinite(f.quarterRevenue)?new Intl.NumberFormat("ja-JP",{notation:"compact",maximumFractionDigits:1}).format(f.quarterRevenue):"—"}</strong></div><div><span>売上 前年比</span><strong>${Number.isFinite(f.quarterRevenueGrowth)?(f.quarterRevenueGrowth>=0?"+":"")+(f.quarterRevenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>営業利益</span><strong>${Number.isFinite(f.quarterOperatingIncome)?new Intl.NumberFormat("ja-JP",{notation:"compact",maximumFractionDigits:1}).format(f.quarterOperatingIncome):"—"}</strong></div><div><span>営業利益 前年比</span><strong>${Number.isFinite(f.quarterOperatingIncomeGrowth)?(f.quarterOperatingIncomeGrowth>=0?"+":"")+(f.quarterOperatingIncomeGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>EPSサプライズ</span><strong>${Number.isFinite(f.earningsSurprisePct)?(f.earningsSurprisePct>=0?"+":"")+(f.earningsSurprisePct*100).toFixed(1)+"%":"—"}</strong></div></div><p class="muted">最新四半期と前年同期を比較。取得できない項目は — 表示。</p></section><section class="detail-section"><h3>企業指標</h3><div class="fundamentals detail-metrics"><div><span>PER</span><strong>${Number.isFinite(f.trailingPE)?f.trailingPE.toFixed(1)+"倍":"—"}</strong></div><div><span>予想PER</span><strong>${Number.isFinite(f.forwardPE)?f.forwardPE.toFixed(1)+"倍":"—"}</strong></div><div><span>売上成長</span><strong>${Number.isFinite(f.revenueGrowth)?(f.revenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益率</span><strong>${Number.isFinite(f.profitMargin)?(f.profitMargin*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益成長</span><strong>${Number.isFinite(f.earningsGrowth)?(f.earningsGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>目標株価</span><strong>${Number.isFinite(f.targetMeanPriceJPY)?yen(f.targetMeanPriceJPY):"—"}</strong></div></div></section>
     <section class="detail-section"><h3>注目テーマ</h3><div class="evidence">${companyThemes(s).map(x=>`<span>${escapeHtml(x)}</span>`).join("")}</div></section><section class="detail-section"><h3>AI見通し</h3><div class="ai outlook"><div class="ai-head"><span class="badge">${escapeHtml(c.view)}</span><span class="badge">データ信頼度 ${c.quality}</span></div><div class="evidence">${c.evidence.length?c.evidence.map(x=>`<span>${escapeHtml(x)}</span>`).join(""):'<span>取得データ待ち</span>'}</div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>基本</b><span>${escapeHtml(c.base)}</span></div><div><b>強気</b><span>${escapeHtml(c.bull)}</span></div><div><b>弱気</b><span>${escapeHtml(c.bear)}</span></div><div><b>変更条件</b><span>${escapeHtml(c.change)}</span></div></div></div></section>
     <section class="detail-section"><h3>最新ニュース</h3>${s.news?.length?`<div class="news-box">${s.news.slice(0,5).map(n=>`<a class="news-item" href="${escapeHtml(n.url||"#")}" target="_blank" rel="noopener"><div><span class="impact ${n.impact}">${n.impact==="positive"?"好材料":n.impact==="negative"?"悪材料":"中立"}</span><small>${escapeHtml(n.publisher||"News")}</small></div><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.reason)}</p></a>`).join("")}</div>`:'<p class="muted">ニュースデータ待ち</p>'}</section>`;
+  showAnalytics(s);
   $("#homeView").hidden=true;$("#detailView").hidden=false;window.scrollTo(0,0);
 }
 function render(){
@@ -220,33 +242,35 @@ $("#addForm").addEventListener("submit",async e=>{
   const s={market:$("#market").value,name:$("#name").value.trim(),symbol:$("#symbol").value,purchasePriceJPY:Number($("#purchasePrice").value),shares:Number($("#shares").value),purchaseDate:"",currentPriceJPY:0,memo:$("#memo").value.trim(),updatedAt:null};
   status("現在株価を取得中…");
   try{await refreshOne(s)}catch(err){status("銘柄は追加しましたが、現在株価を取得できませんでした。","error")}
-  stocks.unshift(s);save();render();e.target.reset();$("#symbol").value="";$("#selectedStock").hidden=true;$("#addDialog").close();
+  stocks.unshift(s);if(!save()){stocks.shift();return}render();e.target.reset();$("#symbol").value="";$("#selectedStock").hidden=true;$("#addDialog").close();
   if(s.currentPriceJPY)status("追加しました。現在株価も取得済みです。","ok");
   setTimeout(()=>status(""),2500);
 });
 $("#list").addEventListener("click",e=>{
   const edit=e.target.closest("[data-edit]");
   if(edit){const i=Number(edit.dataset.edit),s=stocks[i];$("#editIndex").value=i;$("#editStockName").textContent=displayName(s);$("#editPurchasePrice").value=s.purchasePriceJPY||"";$("#editShares").value=s.shares||"";$("#editPurchaseDate").value=s.purchaseDate||"";$("#editMemo").value=s.memo||"";$("#editDialog").showModal();return}
-  const b=e.target.closest("[data-del]");if(b){if(confirm("この銘柄を削除しますか？")){stocks.splice(Number(b.dataset.del),1);save();render()}return}
+  const b=e.target.closest("[data-del]");if(b){if(confirm("この銘柄を削除しますか？")){const old=stocks.slice();stocks.splice(Number(b.dataset.del),1);if(!save())stocks=old;render()}return}
   const card=e.target.closest("[data-detail]");if(card)renderDetail(Number(card.dataset.detail));
 });
-$("#backHome").addEventListener("click",()=>{$("#detailView").hidden=true;const sv=$("#searchView");if(sv&&$("#globalSearch")?.value){sv.hidden=false}else{$("#homeView").hidden=false}window.scrollTo(0,0)});
+$("#backHome").addEventListener("click",()=>{$("#detailView").hidden=true;const sv=$("#searchView");if(sv&&detailFromSearch){sv.hidden=false;$("#homeView").hidden=true}else{$("#homeView").hidden=false}detailFromSearch=false;window.scrollTo(0,0)});
 $("#closeEdit").addEventListener("click",()=>$("#editDialog").close());
-$("#editForm").addEventListener("submit",e=>{e.preventDefault();const i=Number($("#editIndex").value),s=stocks[i];if(!s)return;s.purchasePriceJPY=Number($("#editPurchasePrice").value);s.shares=Number($("#editShares").value);s.purchaseDate=$("#editPurchaseDate").value;s.memo=$("#editMemo").value.trim();save();render();$("#editDialog").close();status("保有情報を更新しました。","ok");setTimeout(()=>status(""),2000)});
+$("#editForm").addEventListener("submit",e=>{e.preventDefault();const i=Number($("#editIndex").value),s=stocks[i];if(!s)return;const old={purchasePriceJPY:s.purchasePriceJPY,shares:s.shares,purchaseDate:s.purchaseDate,memo:s.memo};s.purchasePriceJPY=Number($("#editPurchasePrice").value);s.shares=Number($("#editShares").value);s.purchaseDate=$("#editPurchaseDate").value;s.memo=$("#editMemo").value.trim();if(!save()){Object.assign(s,old);return}render();$("#editDialog").close();status("保有情報を更新しました。","ok");setTimeout(()=>status(""),2000)});
 
-let globalSearchTimer=null;
+let globalSearchTimer=null;let globalSearchRequestId=0;
 function showSearch(){const v=$("#searchView");if(!v)return;$("#homeView").hidden=true;$("#detailView").hidden=true;v.hidden=false;window.scrollTo(0,0);setTimeout(()=>$("#globalSearch")?.focus(),50)}
-function closeSearch(){const v=$("#searchView");if(v)v.hidden=true;$("#detailView").hidden=true;$("#homeView").hidden=false;window.scrollTo(0,0)}
+function closeSearch(){globalSearchRequestId++;const v=$("#searchView");if(v)v.hidden=true;$("#detailView").hidden=true;$("#homeView").hidden=false;window.scrollTo(0,0)}
 async function globalSearch(){
- const input=$("#globalSearch"),box=$("#globalSuggestions");if(!input||!box)return;const q=input.value.trim();if(!q){box.innerHTML="";return}
+ const input=$("#globalSearch"),box=$("#globalSuggestions");if(!input||!box)return;const q=input.value.trim();const requestId=++globalSearchRequestId;if(!q){box.innerHTML="";return}
  let all=[];
  for(const market of ["JP","US"]){try{const r=await fetch(`/api/search?q=${encodeURIComponent(q)}&market=${market}`);if(r.ok){const d=await r.json();all.push(...(d.results||[]).map(x=>({...x,market})))}}catch{}}
  const seen=new Set();all=all.filter(x=>x.symbol&&!seen.has(x.symbol)&&(seen.add(x.symbol),true)).slice(0,10);
- box.innerHTML=all.length?all.map(x=>`<button type="button" class="suggestion global-result" data-symbol="${escapeHtml(x.symbol)}" data-name="${escapeHtml(x.name)}" data-market="${x.market}"><strong>${escapeHtml(x.name)}</strong><span>${x.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"} · ${escapeHtml(x.symbol)}</span></button>`).join(""):'<div class="no-result">候補が見つかりません</div>';
+ if(requestId!==globalSearchRequestId)return;box.innerHTML=all.length?all.map(x=>`<button type="button" class="suggestion global-result" data-symbol="${escapeHtml(x.symbol)}" data-name="${escapeHtml(x.name)}" data-market="${x.market}"><strong>${escapeHtml(x.name)}</strong><span>${x.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"} · ${escapeHtml(x.symbol)}</span></button>`).join(""):'<div class="no-result">候補が見つかりません</div>';
 }
 async function renderExternalDetail(temp){
+ detailFromSearch=true;
  const c=autoComment(temp),f=temp.fundamentals||{};$("#detailTitle").textContent=displayName(temp);$("#detailPrice").textContent=temp.currentPriceJPY?yen(temp.currentPriceJPY):"—";
  $("#detailBody").innerHTML=`<section class="detail-section"><h3>企業指標</h3><div class="fundamentals detail-metrics"><div><span>PER</span><strong>${Number.isFinite(f.trailingPE)?f.trailingPE.toFixed(1)+"倍":"—"}</strong></div><div><span>予想PER</span><strong>${Number.isFinite(f.forwardPE)?f.forwardPE.toFixed(1)+"倍":"—"}</strong></div><div><span>売上成長</span><strong>${Number.isFinite(f.revenueGrowth)?(f.revenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益率</span><strong>${Number.isFinite(f.profitMargin)?(f.profitMargin*100).toFixed(1)+"%":"—"}</strong></div></div></section><section class="detail-section"><h3>AI見通し</h3><div class="ai outlook"><div class="ai-head"><span class="badge">${escapeHtml(c.view)}</span><span class="badge">データ信頼度 ${c.quality}</span></div><div class="evidence">${c.evidence.map(x=>`<span>${escapeHtml(x)}</span>`).join("")}</div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>基本</b><span>${escapeHtml(c.base)}</span></div><div><b>強気</b><span>${escapeHtml(c.bull)}</span></div><div><b>弱気</b><span>${escapeHtml(c.bear)}</span></div></div></div></section>`;
+ showAnalytics(temp);
  $("#searchView").hidden=true;$("#homeView").hidden=true;$("#detailView").hidden=false;window.scrollTo(0,0);
 }
 $("#openSearch")?.addEventListener("click",showSearch);
@@ -259,5 +283,38 @@ $("#refreshBtn").addEventListener("click",refreshAll);
 if("serviceWorker"in navigator){
   navigator.serviceWorker.register("./sw.js").then(reg=>reg.update()).catch(()=>{});
 }
-if(stocks.length)save();render();
+render();
 setTimeout(()=>{if(stocks.some(s=>s.symbol))refreshAll()},500);
+
+const PEERS={"AMAT":["LRCX","KLAC","ASML"],"NVDA":["AMD","AVGO","INTC"],"8035.T":["6857.T","6920.T","7735.T"],"7203.T":["7267.T","7201.T"],"7011.T":["7012.T","7013.T"],"7012.T":["7011.T","7013.T"],"7974.T":["6758.T","7832.T"],"2802.T":["2914.T","2801.T"],"8001.T":["8058.T","8031.T"],"QCOM":["AVGO","TXN","NVDA"]};
+let analyticsRequest=0;
+function showAnalytics(s){
+ const token=++analyticsRequest;
+ const container=document.createElement("section");container.className="detail-section";
+ container.innerHTML='<h3>株価推移</h3><div class="period-buttons"><button data-range="1mo">1か月</button><button data-range="3mo">3か月</button><button data-range="1y">1年</button><button data-range="5y">5年</button></div><div class="history-chart muted">株価データを読み込み中…</div><h3>競合比較</h3><div class="peer-comparison muted">競合銘柄を読み込み中…</div>';
+ $("#detailBody").prepend(container);
+ async function history(range){
+   const target=container.querySelector(".history-chart");target.textContent="読み込み中…";
+   const seq=++analyticsRequest;
+   try{
+     const r=await fetchTimeout("/api/history?symbol="+encodeURIComponent(s.symbol)+"&market="+s.market+"&range="+range,12000);
+     if(!r.ok)throw Error("history");const data=await r.json();
+     if(seq!==analyticsRequest||!container.isConnected)return;
+     const points=data.points||[];if(points.length<2)throw Error("empty");
+     const values=points.map(x=>x.priceJPY),min=Math.min(...values),max=Math.max(...values),spread=max-min||1;
+     const coords=points.map((p,i)=>((i/(points.length-1))*100).toFixed(2)+","+((1-(p.priceJPY-min)/spread)*80+10).toFixed(2)).join(" ");
+     target.innerHTML='<svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="株価折れ線チャート"><polyline points="'+coords+'" fill="none" stroke="#7c8cff" stroke-width="2" vector-effect="non-scaling-stroke"/></svg><div class="chart-labels"><span>'+escapeHtml(points[0].date)+'</span><span>'+yen(values[values.length-1])+'（最新）</span><span>'+escapeHtml(points[points.length-1].date)+'</span></div>';
+   }catch{if(seq===analyticsRequest)target.textContent="株価推移を取得できませんでした。"}
+ }
+ container.querySelectorAll("[data-range]").forEach(b=>b.addEventListener("click",()=>history(b.dataset.range)));
+ history("1mo");
+ const peers=PEERS[s.symbol]||[];
+ const target=container.querySelector(".peer-comparison");
+ if(!peers.length){target.textContent="この銘柄の比較候補はまだ登録されていません。";return}
+ Promise.all(peers.map(async symbol=>{
+   try{const market=symbol.endsWith(".T")?"JP":"US";const r=await fetchTimeout("/api/quote?symbol="+encodeURIComponent(symbol)+"&market="+market,10000);if(!r.ok)throw Error();return {symbol,...await r.json()}}catch{return {symbol}}
+ })).then(rows=>{
+   if(!container.isConnected)return;
+   target.innerHTML='<p class="muted">参考比較（株価・前日比）。株価の絶対値は企業間の割安度を示しません。</p>'+rows.map(x=>'<div class="peer-row"><strong>'+escapeHtml(x.symbol)+'</strong><span>'+(Number.isFinite(x.priceJPY)?yen(x.priceJPY):"取得不可")+'</span><span>'+(Number.isFinite(x.dayChangePct)?x.dayChangePct.toFixed(2)+"%":"—")+'</span></div>').join("");
+ });
+}

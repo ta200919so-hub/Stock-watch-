@@ -18,7 +18,11 @@ self.addEventListener("fetch",e=>{
       const copy=r.clone();
       Promise.resolve().then(()=>caches.open(CACHE)).then(c=>c.put("./index.html",copy)).catch(()=>{}).finally(settleCache);
       return r;
-    }).catch(()=>{settleCache();return caches.open(CACHE).then(c=>c.match("./index.html"))}));
+    }).catch(error=>{
+      settleCache();
+      if(!isShell)throw error;
+      return caches.open(CACHE).then(c=>c.match("./index.html"));
+    }));
     return;
   }
   // Refresh the app code while online; use the last verified cached version offline.

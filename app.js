@@ -303,7 +303,7 @@ function showAnalytics(s){
      const points=data.points||[];if(points.length<2)throw Error("empty");
      const values=points.map(x=>x.priceJPY),min=Math.min(...values),max=Math.max(...values),spread=max-min||1;
      const coords=points.map((p,i)=>((i/(points.length-1))*100).toFixed(2)+","+((1-(p.priceJPY-min)/spread)*80+10).toFixed(2)).join(" ");
-     target.innerHTML='<svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="株価折れ線チャート"><polyline points="'+coords+'" fill="none" stroke="#7c8cff" stroke-width="2" vector-effect="non-scaling-stroke"/></svg><div class="chart-labels"><span>'+escapeHtml(points[0].date)+'</span><span>'+yen(values[values.length-1])+'（最新）</span><span>'+escapeHtml(points[points.length-1].date)+'</span></div>';
+     target.innerHTML='<svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="株価折れ線チャート"><polyline points="'+coords+'" fill="none" stroke="#7c8cff" stroke-width="2" vector-effect="non-scaling-stroke"/></svg><div class="chart-labels"><span>'+escapeHtml(points[0].date)+'</span><span>'+escapeHtml(points[Math.floor((points.length-1)/2)].date)+'</span><span>'+escapeHtml(points[points.length-1].date)+'</span></div>';
    }catch{if(seq===analyticsRequest)target.textContent="株価推移を取得できませんでした。"}
  }
  container.querySelectorAll("[data-range]").forEach(b=>b.addEventListener("click",()=>history(b.dataset.range)));

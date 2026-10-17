@@ -302,8 +302,10 @@ function showAnalytics(s){
      if(seq!==analyticsRequest||!container.isConnected)return;
      const points=data.points||[];if(points.length<2)throw Error("empty");
      const values=points.map(x=>x.priceJPY),min=Math.min(...values),max=Math.max(...values),spread=max-min||1;
-     const coords=points.map((p,i)=>((i/(points.length-1))*100).toFixed(2)+","+((1-(p.priceJPY-min)/spread)*80+10).toFixed(2)).join(" ");
-     target.innerHTML='<svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="株価折れ線チャート"><polyline points="'+coords+'" fill="none" stroke="#7c8cff" stroke-width="2" vector-effect="non-scaling-stroke"/></svg><div class="chart-labels"><span>'+escapeHtml(points[0].date)+'</span><span>'+escapeHtml(points[Math.floor((points.length-1)/2)].date)+'</span><span>'+escapeHtml(points[points.length-1].date)+'</span></div>';
+     const chartLeft=66,chartRight=312,chartTop=12,chartBottom=172;
+     const coords=points.map((p,i)=>(chartLeft+(i/(points.length-1))*(chartRight-chartLeft)).toFixed(2)+","+(chartBottom-((p.priceJPY-min)/spread)*(chartBottom-chartTop)).toFixed(2)).join(" ");
+     const ticks=Array.from({length:5},(_,i)=>{const price=max-(spread*i/4),y=chartTop+(chartBottom-chartTop)*i;return '<line x1="'+chartLeft+'" y1="'+y+'" x2="'+chartRight+'" y2="'+y+'" stroke="#929bb3" stroke-opacity=".22" stroke-dasharray="3 4"/><text x="'+(chartLeft-7)+'" y="'+(y+4)+'" text-anchor="end" fill="#b8c0d6" font-size="11">'+escapeHtml(Math.round(price).toLocaleString("ja-JP"))+'</text>'}).join("");
+     target.innerHTML='<svg viewBox="0 0 330 190" role="img" aria-label="株価推移。縦軸は円、横軸は日付"><text x="5" y="11" fill="#b8c0d6" font-size="10">円</text>'+ticks+'<polyline points="'+coords+'" fill="none" stroke="#7c8cff" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></svg><div class="chart-labels"><span>'+escapeHtml(points[0].date)+'</span><span>'+escapeHtml(points[Math.floor((points.length-1)/2)].date)+'</span><span>'+escapeHtml(points[points.length-1].date)+'</span></div>';
    }catch{if(seq===analyticsRequest)target.textContent="株価推移を取得できませんでした。"}
  }
  container.querySelectorAll("[data-range]").forEach(b=>b.addEventListener("click",()=>history(b.dataset.range)));

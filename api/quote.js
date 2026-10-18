@@ -12,20 +12,25 @@ async function chart(symbol) {
 }
 
 export default async function handler(req, res) {
-  const symbol = String(req.query.symbol || "");
+  const symbol = String(req.query.symbol || "").trim().toUpperCase();
   const market = String(req.query.market || "JP");
 
   if (!symbol) {
     return res.status(400).json({ error: "symbol_required" });
+  }
+  if (!/^[A-Z0-9.^=-]{1,20}$/.test(symbol) || !["JP", "US"].includes(market)) {
+    return res.status(400).json({ error: "invalid_request" });
   }
 
   try {
     const meta = await chart(symbol);
     const raw = Number(meta?.regularMarketPrice);
     const prev = Number(meta?.chartPreviousClose || meta?.previousClose || 0);
-    const dayChangePct = prev ? (raw / prev - 1) * 100 : null;
+    const dayChangePct = Number.isFinite(prev) && prev > 0 ? (raw / prev - 1) * 100 : null;
 
-    if (!raw) throw new Error("no_price");
+    if (!Number.isFinite(raw) || raw <= 0) throw new Error("no_price");
+    // Never treat a USD quote as JPY, or multiply an already-JPY quote by FX.
+    if (meta?.currency !== (market === "US" ? "USD" : "JPY")) throw new Error("unexpected_currency");
 
     let fx = 1;
     let priceJPY = raw;
@@ -34,7 +39,7 @@ export default async function handler(req, res) {
       const fxMeta = await chart("JPY=X");
       fx = Number(fxMeta?.regularMarketPrice);
 
-      if (!fx) throw new Error("no_fx");
+      if (!Number.isFinite(fx) || fx <= 0 || fxMeta?.currency !== "JPY") throw new Error("no_fx");
 
       priceJPY = raw * fx;
     }

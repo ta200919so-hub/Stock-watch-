@@ -286,6 +286,17 @@ if("serviceWorker"in navigator){
 render();
 setTimeout(()=>{if(stocks.some(s=>s.symbol))refreshAll()},500);
 
+function historyChartMarkup(points){
+  const clean=Array.isArray(points)?points.filter(p=>p&&typeof p.date==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(p.date)&&Number.isFinite(p.priceJPY)&&p.priceJPY>0):[];
+  if(clean.length<2)throw Error("history_points");
+  let min=Infinity,max=-Infinity;
+  for(const p of clean){min=Math.min(min,p.priceJPY);max=Math.max(max,p.priceJPY)}
+  const spread=max-min;
+  const coords=clean.map((p,i)=>`${(i/(clean.length-1)*100).toFixed(2)},${(spread===0?50:90-(p.priceJPY-min)/spread*80).toFixed(2)}`).join(" ");
+  const mid=Math.floor((clean.length-1)/2);
+  return `<div class="chart-grid"><div class="chart-y-axis" aria-label="株価の縦軸"><span>${yen(max)}</span><span>${yen(min+spread/2)}</span><span>${yen(min)}</span></div><svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="株価折れ線チャート"><line x1="0" y1="10" x2="100" y2="10" stroke="currentColor" opacity=".2"/><line x1="0" y1="50" x2="100" y2="50" stroke="currentColor" opacity=".2"/><line x1="0" y1="90" x2="100" y2="90" stroke="currentColor" opacity=".2"/><polyline points="${coords}" fill="none" stroke="#7c8cff" stroke-width="2" vector-effect="non-scaling-stroke"/></svg></div><div class="chart-x-axis" aria-label="日付の横軸"><span>${escapeHtml(clean[0].date)}</span><span>${escapeHtml(clean[mid].date)}</span><span>${escapeHtml(clean[clean.length-1].date)}</span></div><div class="chart-current">${yen(clean[clean.length-1].priceJPY)}（最新）</div>`;
+}
+
 const PEERS={"AMAT":["LRCX","KLAC","ASML"],"NVDA":["AMD","AVGO","INTC"],"8035.T":["6857.T","6920.T","7735.T"],"7203.T":["7267.T","7201.T"],"7011.T":["7012.T","7013.T"],"7012.T":["7011.T","7013.T"],"7974.T":["6758.T","7832.T"],"2802.T":["2914.T","2801.T"],"8001.T":["8058.T","8031.T"],"QCOM":["AVGO","TXN","NVDA"]};
 let analyticsRequest=0;
 function showAnalytics(s){
@@ -300,10 +311,7 @@ function showAnalytics(s){
      const r=await fetchTimeout("/api/history?symbol="+encodeURIComponent(s.symbol)+"&market="+s.market+"&range="+range,12000);
      if(!r.ok)throw Error("history");const data=await r.json();
      if(seq!==analyticsRequest||!container.isConnected)return;
-     const points=data.points||[];if(points.length<2)throw Error("empty");
-     const values=points.map(x=>x.priceJPY),min=Math.min(...values),max=Math.max(...values),spread=max-min||1;
-     const coords=points.map((p,i)=>((i/(points.length-1))*100).toFixed(2)+","+((1-(p.priceJPY-min)/spread)*80+10).toFixed(2)).join(" ");
-     target.innerHTML='<svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="株価折れ線チャート"><polyline points="'+coords+'" fill="none" stroke="#7c8cff" stroke-width="2" vector-effect="non-scaling-stroke"/></svg><div class="chart-labels"><span>'+escapeHtml(points[0].date)+'</span><span>'+yen(values[values.length-1])+'（最新）</span><span>'+escapeHtml(points[points.length-1].date)+'</span></div>';
+     target.innerHTML=historyChartMarkup(data.points);
    }catch{if(seq===analyticsRequest)target.textContent="株価推移を取得できませんでした。"}
  }
  container.querySelectorAll("[data-range]").forEach(b=>b.addEventListener("click",()=>history(b.dataset.range)));

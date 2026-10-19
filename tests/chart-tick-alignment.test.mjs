@@ -30,6 +30,6 @@ test('chart yen-axis ticks align with the 10% and 90% SVG guide lines',()=>{
 test('mobile chart keeps a 0-minimum-width SVG track',()=>{
  const grid=decls('.chart-grid');
  const svg=decls('.chart-grid svg');
- assert.match(grid['grid-template-columns'],/minmax\\(0,1fr\\)/);
+ assert.match(grid['grid-template-columns'],/minmax\(0,\s*1fr\)/);
  assert.equal(svg['min-width'],'0');
 });

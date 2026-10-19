@@ -301,10 +301,13 @@ function showAnalytics(s){
      if(!r.ok)throw Error("history");const data=await r.json();
      if(seq!==analyticsRequest||!container.isConnected)return;
      const points=data.points||[];if(points.length<2)throw Error("empty");
-     const values=points.map(x=>x.priceJPY),min=Math.min(...values),max=Math.max(...values),spread=max-min||1;
+     const values=points.map(x=>x.priceJPY);if(values.some(x=>!Number.isFinite(x)||x<=0))throw Error("invalid_price");
+     let min=Math.min(...values),max=Math.max(...values);if(max===min){const pad=Math.max(max*.02,.01);min=Math.max(0,max-pad);max+=pad;}const spread=max-min;
+     const tickStep=spread/4,tickDecimals=tickStep>=1?0:Math.min(4,Math.max(1,Math.ceil(-Math.log10(tickStep))));
+     const tickFormat=new Intl.NumberFormat("ja-JP",{maximumFractionDigits:tickDecimals});
      const chartLeft=66,chartRight=312,chartTop=12,chartBottom=172;
      const coords=points.map((p,i)=>(chartLeft+(i/(points.length-1))*(chartRight-chartLeft)).toFixed(2)+","+(chartBottom-((p.priceJPY-min)/spread)*(chartBottom-chartTop)).toFixed(2)).join(" ");
-     const ticks=Array.from({length:5},(_,i)=>{const price=max-(spread*i/4),y=chartTop+(chartBottom-chartTop)*i;return '<line x1="'+chartLeft+'" y1="'+y+'" x2="'+chartRight+'" y2="'+y+'" stroke="#929bb3" stroke-opacity=".22" stroke-dasharray="3 4"/><text x="'+(chartLeft-7)+'" y="'+(y+4)+'" text-anchor="end" fill="#b8c0d6" font-size="11">'+escapeHtml(Math.round(price).toLocaleString("ja-JP"))+'</text>'}).join("");
+     const ticks=Array.from({length:5},(_,i)=>{const price=max-(spread*i/4),y=chartTop+(chartBottom-chartTop)*i;return '<line x1="'+chartLeft+'" y1="'+y+'" x2="'+chartRight+'" y2="'+y+'" stroke="#929bb3" stroke-opacity=".22" stroke-dasharray="3 4"/><text x="'+(chartLeft-7)+'" y="'+(y+4)+'" text-anchor="end" fill="#b8c0d6" font-size="11">'+escapeHtml(tickFormat.format(price))+'</text>'}).join("");
      target.innerHTML='<svg viewBox="0 0 330 190" role="img" aria-label="株価推移。縦軸は円、横軸は日付"><text x="5" y="11" fill="#b8c0d6" font-size="10">円</text>'+ticks+'<polyline points="'+coords+'" fill="none" stroke="#7c8cff" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></svg><div class="chart-labels"><span>'+escapeHtml(points[0].date)+'</span><span>'+escapeHtml(points[Math.floor((points.length-1)/2)].date)+'</span><span>'+escapeHtml(points[points.length-1].date)+'</span></div>';
    }catch{if(seq===analyticsRequest)target.textContent="株価推移を取得できませんでした。"}
  }

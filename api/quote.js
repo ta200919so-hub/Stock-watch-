@@ -18,7 +18,9 @@ export default async function handler(req, res) {
   if (!symbol) {
     return res.status(400).json({ error: "symbol_required" });
   }
-  if (!/^[A-Z0-9.^=-]{1,20}$/.test(symbol) || !["JP", "US"].includes(market)) {
+  if (!/^[A-Z0-9.^=-]{1,20}$/.test(symbol) || !["JP", "US"].includes(market) ||
+      (market === "JP" && !symbol.endsWith(".T")) ||
+      (market === "US" && symbol.endsWith(".T"))) {
     return res.status(400).json({ error: "invalid_request" });
   }
 
@@ -43,6 +45,7 @@ export default async function handler(req, res) {
 
       priceJPY = raw * fx;
     }
+    if (!Number.isFinite(priceJPY) || priceJPY <= 0) throw new Error("invalid_converted_price");
 
     res.setHeader(
       "Cache-Control",

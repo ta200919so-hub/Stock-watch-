@@ -220,7 +220,10 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
           await navigator.serviceWorker.ready;
           return await caches.keys();
         });
-        assert.ok(cache.includes("stock-watch-ai-v4-17"),"PWA revision must install");
+        const swSource=await readFile(resolve(root,"sw.js"),"utf8");
+        const expectedCache=swSource.match(/^const CACHE="([^"]+)";/m)?.[1];
+        assert.ok(expectedCache,"PWA cache revision must be declared");
+        assert.ok(cache.includes(expectedCache),"PWA revision must install");
       }finally{await context.close()}
     });
   }finally{

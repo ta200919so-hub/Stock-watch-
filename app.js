@@ -281,9 +281,9 @@ $("#backHome").addEventListener("click",()=>{$("#detailView").hidden=true;const 
 $("#closeEdit").addEventListener("click",()=>$("#editDialog").close());
 $("#editForm").addEventListener("submit",e=>{e.preventDefault();const i=Number($("#editIndex").value),s=stocks[i];if(!s)return;const old={purchasePriceJPY:s.purchasePriceJPY,shares:s.shares,purchaseDate:s.purchaseDate,memo:s.memo};s.purchasePriceJPY=Number($("#editPurchasePrice").value);s.shares=Number($("#editShares").value);s.purchaseDate=$("#editPurchaseDate").value;s.memo=$("#editMemo").value.trim();if(!save()){Object.assign(s,old);return}render();$("#editDialog").close();status("保有情報を更新しました。","ok");setTimeout(()=>status(""),2000)});
 
-let globalSearchTimer=null;let globalSearchRequestId=0;
+let globalSearchTimer=null;let globalSearchRequestId=0;let globalDetailRequestId=0;
 function showSearch(){const v=$("#searchView");if(!v)return;$("#homeView").hidden=true;$("#detailView").hidden=true;v.hidden=false;window.scrollTo(0,0);setTimeout(()=>$("#globalSearch")?.focus(),50)}
-function closeSearch(){globalSearchRequestId++;clearTimeout(globalSearchTimer);const v=$("#searchView");if(v)v.hidden=true;$("#globalSuggestions").innerHTML="";$("#globalSearch").value="";$("#detailView").hidden=true;$("#homeView").hidden=false;window.scrollTo(0,0)}
+function closeSearch(){globalDetailRequestId++;globalSearchRequestId++;clearTimeout(globalSearchTimer);const v=$("#searchView");if(v)v.hidden=true;$("#globalSuggestions").innerHTML="";$("#globalSearch").value="";$("#detailView").hidden=true;$("#homeView").hidden=false;window.scrollTo(0,0)}
 async function globalSearch(){
  const input=$("#globalSearch"),box=$("#globalSuggestions");if(!input||!box)return;const q=input.value.trim();const requestId=++globalSearchRequestId;if(!q){box.innerHTML="";return}
  let all=[];
@@ -300,8 +300,20 @@ async function renderExternalDetail(temp){
 }
 $("#openSearch")?.addEventListener("click",showSearch);
 $("#searchBack")?.addEventListener("click",closeSearch);
-$("#globalSearch")?.addEventListener("input",()=>{globalSearchRequestId++;$("#globalSuggestions").innerHTML="";clearTimeout(globalSearchTimer);globalSearchTimer=setTimeout(globalSearch,300)});
-$("#globalSuggestions")?.addEventListener("click",async e=>{const b=e.target.closest(".global-result");if(!b)return;const temp={market:b.dataset.market,name:b.dataset.name,symbol:b.dataset.symbol,purchasePriceJPY:0,shares:null,currentPriceJPY:0,updatedAt:null};try{await refreshOne(temp);await renderExternalDetail(temp)}catch{alert("分析データを取得できませんでした。")}});
+$("#globalSearch")?.addEventListener("input",()=>{globalDetailRequestId++;globalSearchRequestId++;$("#globalSuggestions").innerHTML="";clearTimeout(globalSearchTimer);globalSearchTimer=setTimeout(globalSearch,300)});
+$("#globalSuggestions")?.addEventListener("click",async e=>{
+ const b=e.target.closest(".global-result");if(!b)return;
+ const requestId=++globalDetailRequestId;
+ const temp={market:b.dataset.market,name:b.dataset.name,symbol:b.dataset.symbol,purchasePriceJPY:0,shares:null,currentPriceJPY:0,updatedAt:null};
+ try{
+  await refreshOne(temp);
+  // The user may have changed the query, selected another stock or left search.
+  if(requestId!==globalDetailRequestId||$("#searchView").hidden)return;
+  await renderExternalDetail(temp);
+ }catch{
+  if(requestId===globalDetailRequestId&&!$("#searchView").hidden)alert("分析データを取得できませんでした。");
+ }
+});
 
 $("#refreshBtn").addEventListener("click",refreshAll);
 

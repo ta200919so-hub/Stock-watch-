@@ -173,6 +173,34 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         assert.equal(await page.locator(".global-result").count(),0);
       }finally{releaseOld();await context.close()}
     });
+
+    await t.test("leaving global search during quote loading never opens stale detail",async()=>{
+      const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:"block"});
+      let releaseQuote;
+      const quoteGate=new Promise(resolve=>{releaseQuote=resolve});
+      try{
+        const page=await context.newPage();
+        await page.route("**/api/quote?*",async route=>{
+          await quoteGate;
+          await route.fulfill({json:{priceJPY:200,dayChangePct:1}});
+        });
+        await page.goto(base);
+        await page.locator("#openSearch").click();
+        await page.locator("#globalSearch").fill("トヨタ");
+        await page.locator(".global-result").first().waitFor({timeout:10000});
+        const quoteRequest=page.waitForRequest(req=>req.url().includes("/api/quote?"));
+        await page.locator(".global-result").first().click();
+        await quoteRequest;
+        await page.locator("#searchBack").click();
+        const quoteResponse=page.waitForResponse(res=>res.url().includes("/api/quote?"));
+        releaseQuote();
+        await quoteResponse;
+        await page.waitForTimeout(150);
+        assert.equal(await page.locator("#homeView").isHidden(),false);
+        assert.equal(await page.locator("#detailView").isHidden(),true);
+        assert.equal(await page.locator("#searchView").isHidden(),true);
+      }finally{releaseQuote();await context.close()}
+    });
     await t.test("corrupt primary recovers backup without modifying stored holdings",async()=>{
       const context=await browser.newContext({viewport:{width:375,height:812},isMobile:true,hasTouch:true});
       try{
@@ -192,7 +220,7 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
           await navigator.serviceWorker.ready;
           return await caches.keys();
         });
-        assert.ok(cache.includes("stock-watch-ai-v4-14"),"PWA revision must install");
+        assert.ok(cache.includes("stock-watch-ai-v4-15"),"PWA revision must install");
       }finally{await context.close()}
     });
   }finally{

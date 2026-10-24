@@ -271,3 +271,39 @@ test("editing shares and resubmitting keeps only the new quote submission",async
  assert.equal(x.stocks()[0].currentPriceJPY,250);
  assert.equal(JSON.parse(x.map.get(KEY)).length,1);
 });
+
+test("leaving global search while a quote is pending does not reopen stale detail",async()=>{
+ let releaseQuote;
+ const x=boot({},false,url=>url.startsWith("/api/quote")?
+  new Promise(resolve=>{releaseQuote=resolve}):
+  Promise.resolve({ok:true,json:async()=>({items:[]})}));
+ x.node("#openSearch").handlers.click();
+ const result={dataset:{market:"US",name:"Applied Materials",symbol:"AMAT"}};
+ const pending=x.node("#globalSuggestions").handlers.click({target:{closest:()=>result}});
+ assert.equal(typeof releaseQuote,"function");
+ x.node("#searchBack").handlers.click();
+ releaseQuote({ok:true,json:async()=>({priceJPY:200,dayChangePct:1})});
+ await pending;
+ assert.equal(x.node("#homeView").hidden,false);
+ assert.equal(x.node("#searchView").hidden,true);
+ assert.equal(x.node("#detailView").hidden,true);
+ assert.equal(x.alerts.length,0);
+ assert.equal(x.map.has(KEY),false);
+});
+test("editing global search during a pending detail quote cancels old navigation",async()=>{
+ let releaseQuote;
+ const x=boot({},false,url=>url.startsWith("/api/quote")?
+  new Promise(resolve=>{releaseQuote=resolve}):
+  Promise.resolve({ok:true,json:async()=>({items:[]})}));
+ x.node("#openSearch").handlers.click();
+ const result={dataset:{market:"US",name:"Applied Materials",symbol:"AMAT"}};
+ const pending=x.node("#globalSuggestions").handlers.click({target:{closest:()=>result}});
+ x.node("#globalSearch").value="MSFT";
+ x.node("#globalSearch").handlers.input();
+ releaseQuote({ok:true,json:async()=>({priceJPY:200,dayChangePct:1})});
+ await pending;
+ assert.equal(x.node("#searchView").hidden,false);
+ assert.equal(x.node("#detailView").hidden,false);
+ assert.equal(x.node("#globalSearch").value,"MSFT");
+ assert.equal(x.map.has(KEY),false);
+});

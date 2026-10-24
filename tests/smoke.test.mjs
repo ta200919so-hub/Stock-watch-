@@ -57,6 +57,18 @@ test("save preserves previous valid state as backup",()=>{
  assert.equal(x.map.get(KEY),"[]");
  assert.equal(JSON.parse(x.map.get(BACKUP))[0].symbol,"AMAT");
 });
+test("re-adding a holding after an empty portfolio preserves the last recoverable backup",()=>{
+ const x=boot({[KEY]:"[]",[BACKUP]:JSON.stringify([holding])});
+ assert.equal(x.stocks().length,0,"an intentional empty primary remains empty");
+ x.stocks().push({...holding,symbol:"MSFT",name:"Microsoft"});
+ assert.equal(vm.runInContext("save()",x.context),true);
+ assert.equal(JSON.parse(x.map.get(KEY))[0].symbol,"MSFT");
+ assert.equal(JSON.parse(x.map.get(BACKUP))[0].symbol,"AMAT",
+  "saving a new holding must not replace the only non-empty backup with []");
+ x.map.set(KEY,"{corrupt");
+ const recovered=boot(Object.fromEntries(x.map));
+ assert.equal(recovered.stocks()[0].symbol,"AMAT");
+});
 test("search result detail back returns to search",async()=>{
  const x=boot();
  await vm.runInContext('renderExternalDetail({symbol:"AMAT",name:"AMAT",market:"US",currentPriceJPY:200})',x.context);

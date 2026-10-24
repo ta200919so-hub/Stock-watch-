@@ -69,6 +69,25 @@ test("re-adding a holding after an empty portfolio preserves the last recoverabl
  const recovered=boot(Object.fromEntries(x.map));
  assert.equal(recovered.stocks()[0].symbol,"AMAT");
 });
+test("saving recovered holdings does not overwrite the only good backup with invalid primary entries",()=>{
+ const badPrimary=JSON.stringify([null,false,"invalid",42]);
+ const x=boot({[KEY]:badPrimary,[BACKUP]:JSON.stringify([holding])});
+ assert.equal(x.stocks()[0].symbol,"AMAT","boot must load valid backup");
+ x.stocks().push({...holding,symbol:"MSFT",name:"Microsoft"});
+ assert.equal(vm.runInContext("save()",x.context),true);
+ assert.equal(JSON.parse(x.map.get(KEY)).length,2);
+ assert.equal(JSON.parse(x.map.get(BACKUP))[0].symbol,"AMAT",
+  "malformed non-empty primary must never replace the only valid recovery snapshot");
+ x.map.set(KEY,"{corrupt");
+ const recovered=boot(Object.fromEntries(x.map));
+ assert.equal(recovered.stocks()[0].symbol,"AMAT");
+});
+test("backup still captures a previous portfolio with some invalid entries",()=>{
+ const x=boot({[KEY]:JSON.stringify([null,holding])});
+ assert.equal(x.stocks().length,1);
+ assert.equal(vm.runInContext("save()",x.context),true);
+ assert.equal(JSON.parse(x.map.get(BACKUP))[1].symbol,"AMAT");
+});
 test("search result detail back returns to search",async()=>{
  const x=boot();
  await vm.runInContext('renderExternalDetail({symbol:"AMAT",name:"AMAT",market:"US",currentPriceJPY:200})',x.context);

@@ -37,7 +37,19 @@ function save(){
   try{
     const previous=localStorage.getItem(KEY);
     if(previous!==null){
-      try{const prior=JSON.parse(previous);if(Array.isArray(prior)&&prior.some(validStoredHolding))localStorage.setItem(BACKUP_KEY,previous)}catch{}
+      let prior;
+      try{prior=JSON.parse(previous)}catch{}
+      const validPrimary=Array.isArray(prior)&&(prior.length===0||prior.some(validStoredHolding));
+      if(!validPrimary){
+        // Do not destroy the only copy of a potentially recoverable portfolio.
+        let validBackup=false;
+        try{const backup=JSON.parse(localStorage.getItem(BACKUP_KEY));validBackup=Array.isArray(backup)&&backup.some(validStoredHolding)}catch{}
+        if(!validBackup){
+          alert("保有データを安全に復元できないため、既存の保存内容を上書きせず中止しました。");
+          return false;
+        }
+      }
+      if(Array.isArray(prior)&&prior.some(validStoredHolding))localStorage.setItem(BACKUP_KEY,previous);
     }
     localStorage.setItem(KEY,JSON.stringify(stocks));
     return true;
@@ -209,8 +221,8 @@ async function refreshAll(){
   let ok=0;
   try{
     for(const s of stocks){try{await refreshOne(s);ok++}catch(e){}}
-    save();render();
-    status(ok?`${ok}銘柄の株価を更新しました`:"株価を取得できませんでした。もう一度お試しください。",ok?"ok":"error");
+    const saved=save();render();
+    status(!saved?"株価は取得しましたが、保有データを保存できませんでした。":ok?`${ok}銘柄の株価を更新しました`:"株価を取得できませんでした。もう一度お試しください。",saved&&ok?"ok":"error");
   }finally{
     btn.disabled=false;btn.dataset.loading="0";
     setTimeout(()=>status(""),2500);

@@ -69,6 +69,29 @@ test("re-adding a holding after an empty portfolio preserves the last recoverabl
  const recovered=boot(Object.fromEntries(x.map));
  assert.equal(recovered.stocks()[0].symbol,"AMAT");
 });
+test("unrecoverable primary data is never silently overwritten",()=>{
+ for(const corrupt of ["{broken",JSON.stringify({symbol:"AMAT"}),JSON.stringify([null,false,42])]){
+  const x=boot({[KEY]:corrupt});
+  x.stocks().push({...holding});
+  assert.equal(vm.runInContext("save()",x.context),false);
+  assert.equal(x.map.get(KEY),corrupt,"preserve original data for manual recovery");
+  assert.equal(x.map.has(BACKUP),false);
+  assert.equal(x.alerts.length,1);
+ }
+});
+test("unrecoverable primary and invalid backup are both preserved",()=>{
+ const x=boot({[KEY]:"{broken",[BACKUP]:"[null]"});
+ x.stocks().push({...holding});
+ assert.equal(vm.runInContext("save()",x.context),false);
+ assert.equal(x.map.get(KEY),"{broken");
+ assert.equal(x.map.get(BACKUP),"[null]");
+});
+test("failed automatic refresh does not claim holdings were saved",async()=>{
+ const x=boot({[KEY]:JSON.stringify([holding])},true);
+ await vm.runInContext("refreshAll()",x.context);
+ assert.match(x.node("#status").textContent,/保存できませんでした/);
+ assert.equal(x.node("#status").className,"status error");
+});
 test("saving recovered holdings does not overwrite the only good backup with invalid primary entries",()=>{
  const badPrimary=JSON.stringify([null,false,"invalid",42]);
  const x=boot({[KEY]:badPrimary,[BACKUP]:JSON.stringify([holding])});

@@ -118,7 +118,7 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
           await navigator.serviceWorker.ready;
           return await caches.keys();
         });
-        assert.ok(cache.includes("stock-watch-ai-v4-10"),"PWA revision must install");
+        assert.ok(cache.includes("stock-watch-ai-v4-11"),"PWA revision must install");
       }finally{await context.close()}
     });
   }finally{

@@ -229,3 +229,45 @@ test("editing the selected name cancels an in-flight add submission",async()=>{
  assert.equal(x.stocks().length,0);
  assert.equal(x.map.has(KEY),false);
 });
+
+test("editing purchase details while a quote is pending never saves a stale snapshot",async()=>{
+ for(const [field,newValue] of [["#purchasePrice","150"],["#shares","3"],["#memo","updated"]]){
+  let releaseQuote;
+  const x=boot({},false,url=>url.startsWith("/api/quote")?
+   new Promise(resolve=>{releaseQuote=resolve}):
+   Promise.resolve({ok:true,json:async()=>({items:[]})}));
+  x.node("#symbol").value="AMAT";x.node("#market").value="US";
+  x.node("#name").value="AMAT";x.node("#shares").value="2";
+  x.node("#purchasePrice").value="100";x.node("#memo").value="original";
+  x.node("#addDialog").open=true;
+  const pending=x.node("#addForm").handlers.submit({preventDefault(){},target:{reset(){}}});
+  x.node(field).value=newValue;
+  x.node(field).handlers.input();
+  releaseQuote({ok:true,json:async()=>({priceJPY:200,dayChangePct:1})});
+  await pending;
+  assert.equal(x.stocks().length,0,field+" must cancel pending quote snapshot");
+  assert.equal(x.map.has(KEY),false,field+" must not write holdings");
+ }
+});
+test("editing shares and resubmitting keeps only the new quote submission",async()=>{
+ const quotes=[];
+ const x=boot({},false,url=>url.startsWith("/api/quote")?
+  new Promise(resolve=>quotes.push(resolve)):
+  Promise.resolve({ok:true,json:async()=>({items:[]})}));
+ x.node("#symbol").value="AMAT";x.node("#market").value="US";
+ x.node("#name").value="AMAT";x.node("#shares").value="2";
+ x.node("#purchasePrice").value="100";x.node("#addDialog").open=true;
+ const event={preventDefault(){},target:{reset(){}}};
+ const old=x.node("#addForm").handlers.submit(event);
+ x.node("#shares").value="3";x.node("#shares").handlers.input();
+ const current=x.node("#addForm").handlers.submit(event);
+ assert.equal(quotes.length,2,"resubmission should start a fresh quote request");
+ quotes[1]({ok:true,json:async()=>({priceJPY:250,dayChangePct:1})});
+ await current;
+ quotes[0]({ok:true,json:async()=>({priceJPY:200,dayChangePct:1})});
+ await old;
+ assert.equal(x.stocks().length,1);
+ assert.equal(x.stocks()[0].shares,3);
+ assert.equal(x.stocks()[0].currentPriceJPY,250);
+ assert.equal(JSON.parse(x.map.get(KEY)).length,1);
+});

@@ -102,3 +102,50 @@ test("Japanese aliases return correct ticker",async()=>{
  const r=response();await handler({query:{q:"ＴＯＴＯ",market:"JP"}},r);
  assert.equal(r.code,200);assert.equal(r.body.results[0].symbol,"5332.T");
 });
+
+test("add-holding search keeps newest results when older requests finish last",async()=>{
+ const pending=[];
+ const x=boot({},false,url=>new Promise(resolve=>pending.push({url,resolve})));
+ x.node("#name").value="old";
+ const old=vm.runInContext("searchStocks()",x.context);
+ x.node("#name").value="new";
+ const latest=vm.runInContext("searchStocks()",x.context);
+ assert.equal(pending.length,2);
+ pending[1].resolve({ok:true,json:async()=>({results:[{symbol:"NEW",name:"New Company"}]})});
+ await latest;
+ pending[0].resolve({ok:true,json:async()=>({results:[{symbol:"OLD",name:"Old Company"}]})});
+ await old;
+ assert.match(x.node("#suggestions").innerHTML,/NEW/);
+ assert.doesNotMatch(x.node("#suggestions").innerHTML,/OLD/);
+});
+test("editing a selected stock name immediately clears ticker and ignores late suggestions",async()=>{
+ let release;
+ const x=boot({},false,()=>new Promise(resolve=>{release=resolve}));
+ x.node("#name").value="AMAT";
+ x.node("#symbol").value="AMAT";
+ x.node("#selectedStock").hidden=false;
+ const pending=vm.runInContext("searchStocks()",x.context);
+ x.node("#name").value="MSFT";
+ x.node("#name").handlers.input();
+ assert.equal(x.node("#symbol").value,"");
+ assert.equal(x.node("#selectedStock").hidden,true);
+ release({ok:true,json:async()=>({results:[{symbol:"AMAT",name:"Applied Materials"}]})});
+ await pending;
+ assert.equal(x.node("#suggestions").hidden,true);
+ assert.doesNotMatch(x.node("#suggestions").innerHTML,/AMAT/);
+});
+
+test("closing add dialog with Escape invalidates pending search results",async()=>{
+ let release;
+ const x=boot({},false,()=>new Promise(resolve=>{release=resolve}));
+ x.node("#name").value="AMAT";
+ x.node("#addDialog").open=true;
+ const pending=vm.runInContext("searchStocks()",x.context);
+ x.node("#addDialog").open=false;
+ x.node("#addDialog").handlers.close();
+ assert.equal(x.node("#suggestions").hidden,true);
+ release({ok:true,json:async()=>({results:[{symbol:"AMAT",name:"Applied Materials"}]})});
+ await pending;
+ assert.equal(x.node("#suggestions").hidden,true);
+ assert.doesNotMatch(x.node("#suggestions").innerHTML,/AMAT/);
+});

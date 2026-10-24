@@ -2,6 +2,7 @@ const KEY="stock-watch-ai-v1";
 const BACKUP_KEY="stock-watch-ai-backup-v1";
 let filter="ALL";
 let searchTimer=null;
+let addSearchRequestId=0;
 let detailFromSearch=false;
 const $=s=>document.querySelector(s);
 const yen=n=>"¥"+new Intl.NumberFormat("ja-JP",{maximumFractionDigits:0}).format(Number(n)||0);
@@ -213,6 +214,7 @@ async function refreshAll(){
   }
 }
 async function searchStocks(){
+  const requestId=++addSearchRequestId;
   const q=$("#name").value.trim(), market=$("#market").value;
   $("#symbol").value=""; $("#selectedStock").hidden=true;
   if(q.length<1){$("#suggestions").hidden=true;return}
@@ -220,19 +222,23 @@ async function searchStocks(){
     const r=await fetch(`/api/search?q=${encodeURIComponent(q)}&market=${market}`);
     if(!r.ok)throw new Error();
     const data=await r.json();
+    if(requestId!==addSearchRequestId||q!==$("#name").value.trim()||market!==$("#market").value)return;
     const box=$("#suggestions");
     if(!data.results?.length){box.innerHTML='<div class="no-result">候補が見つかりません</div>';box.hidden=false;return}
     box.innerHTML=data.results.map(x=>`<button type="button" class="suggestion" data-symbol="${escapeHtml(x.symbol)}" data-name="${escapeHtml(x.name)}"><strong>${escapeHtml(x.name)}</strong><span>${market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"}</span></button>`).join("");
     box.hidden=false;
-  }catch(e){$("#suggestions").hidden=true}
+  }catch(e){if(requestId===addSearchRequestId)$("#suggestions").hidden=true}
 }
 document.querySelectorAll(".filter").forEach(b=>b.addEventListener("click",()=>{filter=b.dataset.filter;document.querySelectorAll(".filter").forEach(x=>x.classList.remove("active"));b.classList.add("active");render()}));
 $("#openAdd").addEventListener("click",()=>$("#addDialog").showModal());
-$("#closeAdd").addEventListener("click",()=>$("#addDialog").close());
-$("#name").addEventListener("input",()=>{clearTimeout(searchTimer);searchTimer=setTimeout(searchStocks,350)});
-$("#market").addEventListener("change",()=>{$("#symbol").value="";$("#selectedStock").hidden=true;$("#suggestions").hidden=true;if($("#name").value.trim())searchStocks()});
+$("#closeAdd").addEventListener("click",()=>{addSearchRequestId++;clearTimeout(searchTimer);$("#addDialog").close()});
+// Native Escape, form completion and programmatic closes must also invalidate pending searches.
+$("#addDialog").addEventListener("close",()=>{addSearchRequestId++;clearTimeout(searchTimer);$("#suggestions").hidden=true});
+$("#name").addEventListener("input",()=>{addSearchRequestId++;$("#symbol").value="";$("#selectedStock").hidden=true;$("#suggestions").hidden=true;clearTimeout(searchTimer);searchTimer=setTimeout(searchStocks,350)});
+$("#market").addEventListener("change",()=>{addSearchRequestId++;clearTimeout(searchTimer);$("#symbol").value="";$("#selectedStock").hidden=true;$("#suggestions").hidden=true;if($("#name").value.trim())searchStocks()});
 $("#suggestions").addEventListener("click",e=>{
   const b=e.target.closest(".suggestion"); if(!b)return;
+  addSearchRequestId++;clearTimeout(searchTimer);
   $("#name").value=b.dataset.name; $("#symbol").value=b.dataset.symbol;
   $("#selectedStock").textContent=`✓ ${b.dataset.name} を選択`; $("#selectedStock").hidden=false; $("#suggestions").hidden=true;
 });

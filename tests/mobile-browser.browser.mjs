@@ -82,6 +82,13 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         await page.locator('[data-detail="0"]').click();
         await page.locator(".history-chart svg").waitFor({timeout:10000});
         assert.equal(await page.locator(".history-chart svg text").count(),6);
+        const tickBounds=await page.locator(".history-chart svg text").evaluateAll(nodes=>
+          nodes.slice(1).map(node=>{
+            const label=node.getBoundingClientRect(),svg=node.ownerSVGElement.getBoundingClientRect();
+            return {top:label.top,bottom:label.bottom,svgTop:svg.top,svgBottom:svg.bottom};
+          }));
+        assert.ok(tickBounds.every(x=>x.top>=x.svgTop&&x.bottom<=x.svgBottom),
+          `all five y-axis labels must be visible: ${JSON.stringify(tickBounds)}`);
         assert.equal(await page.locator(".chart-labels span").count(),3);
         await page.screenshot({path:resolve(screenshots,"chart-390.png")});
         await page.locator("#backHome").click();

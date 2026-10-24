@@ -303,7 +303,7 @@ test("editing global search during a pending detail quote cancels old navigation
  releaseQuote({ok:true,json:async()=>({priceJPY:200,dayChangePct:1})});
  await pending;
  assert.equal(x.node("#searchView").hidden,false);
- assert.equal(x.node("#detailView").hidden,false);
+ assert.equal(x.node("#detailView").hidden,true);
  assert.equal(x.node("#globalSearch").value,"MSFT");
  assert.equal(x.map.has(KEY),false);
 });

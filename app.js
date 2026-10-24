@@ -234,6 +234,8 @@ async function searchStocks(){
 document.querySelectorAll(".filter").forEach(b=>b.addEventListener("click",()=>{filter=b.dataset.filter;document.querySelectorAll(".filter").forEach(x=>x.classList.remove("active"));b.classList.add("active");render()}));
 $("#openAdd").addEventListener("click",()=>$("#addDialog").showModal());
 function invalidatePendingAdd(){addSubmissionId++;addSubmissionPending=false}
+// Changing purchase details while a quote is pending cancels the old snapshot.
+["#purchasePrice","#shares","#memo"].forEach(selector=>$(selector).addEventListener("input",invalidatePendingAdd));
 $("#closeAdd").addEventListener("click",()=>{invalidatePendingAdd();addSearchRequestId++;clearTimeout(searchTimer);$("#addDialog").close()});
 // Native Escape, form completion and programmatic closes must also invalidate pending searches.
 $("#addDialog").addEventListener("close",()=>{invalidatePendingAdd();addSearchRequestId++;clearTimeout(searchTimer);$("#suggestions").hidden=true});

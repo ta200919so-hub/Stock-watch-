@@ -105,6 +105,20 @@ test("failed primary write removes only the newly staged backup when none existe
  assert.equal(x.map.get(KEY),original);
  assert.equal(x.map.has(BACKUP),false,"failed write must not leave a new backup");
 });
+test("invalid successful quote responses never erase an existing portfolio price",async()=>{
+ for(const bad of [null,0,-1,"invalid",undefined]){
+  const x=boot({[KEY]:JSON.stringify([holding])},false,async url=>({
+   ok:true,json:async()=>url.startsWith("/api/quote")?{priceJPY:bad,dayChangePct:12}:{items:[]}
+  }));
+  await assert.rejects(vm.runInContext("refreshOne(stocks[0])",x.context),/invalid_quote/);
+  assert.equal(x.stocks()[0].currentPriceJPY,200,"invalid quote must preserve the prior price");
+  assert.equal(x.stocks()[0].dayChangePct,undefined,"invalid quote must not alter the daily change");
+  await vm.runInContext("refreshAll()",x.context);
+  assert.equal(JSON.parse(x.map.get(KEY))[0].currentPriceJPY,200,
+   "invalid quote must not be persisted over the previous price");
+  assert.match(x.node("#status").textContent,/株価を取得できませんでした/);
+ }
+});
 test("failed automatic refresh does not claim holdings were saved",async()=>{
  const x=boot({[KEY]:JSON.stringify([holding])},true);
  await vm.runInContext("refreshAll()",x.context);

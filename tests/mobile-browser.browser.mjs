@@ -99,6 +99,48 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         await page.screenshot({path:resolve(screenshots,"search-390.png")});
       }finally{await context.close()}
     });
+    await t.test("add-holding search ignores late network responses in Chromium",async()=>{
+      const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+      let releaseOld;
+      const oldBlocked=new Promise(resolve=>{releaseOld=resolve});
+      try{
+        const page=await context.newPage();
+        await page.route("**/api/search?*",async route=>{
+          const q=new URL(route.request().url()).searchParams.get("q");
+          if(q==="古い"){
+            await oldBlocked;
+            return route.fulfill({json:{results:[{symbol:"OLD",name:"古い会社"}]}});
+          }
+          return route.fulfill({json:{results:[{symbol:"NEW",name:"新しい会社"}]}});
+        });
+        await page.goto(base);
+        await page.locator("#openAdd").click();
+        const oldRequest=page.waitForRequest(req=>req.url().includes("/api/search?")&&
+          new URL(req.url()).searchParams.get("q")==="古い");
+        await page.locator("#name").fill("古い");
+        await oldRequest;
+        await page.locator("#name").fill("新しい");
+        await page.locator('.suggestion[data-symbol="NEW"]').waitFor({timeout:10000});
+        releaseOld();
+        await page.waitForResponse(res=>res.url().includes("/api/search?")&&
+          new URL(res.url()).searchParams.get("q")==="古い");
+        await page.waitForTimeout(100);
+        assert.equal(await page.locator('.suggestion[data-symbol="OLD"]').count(),0);
+        assert.equal(await page.locator('.suggestion[data-symbol="NEW"]').count(),1);
+        await page.locator('.suggestion[data-symbol="NEW"]').click();
+        assert.equal(await page.locator("#symbol").inputValue(),"NEW");
+        await page.locator("#name").fill("変更後");
+        assert.equal(await page.locator("#symbol").inputValue(),"",
+          "editing the name must immediately invalidate selected ticker");
+        assert.equal(await page.locator("#selectedStock").isHidden(),true);
+        await page.keyboard.press("Escape");
+        assert.equal(await page.locator("#addDialog").evaluate(el=>el.open),false);
+        await page.waitForTimeout(450);
+        assert.equal(await page.locator("#suggestions").isHidden(),true,
+          "closing dialog must cancel delayed suggestions");
+        await page.screenshot({path:resolve(screenshots,"add-search-390.png")});
+      }finally{releaseOld();await context.close()}
+    });
     await t.test("corrupt primary recovers backup without modifying stored holdings",async()=>{
       const context=await browser.newContext({viewport:{width:375,height:812},isMobile:true,hasTouch:true});
       try{

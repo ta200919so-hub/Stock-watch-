@@ -1,5 +1,5 @@
-const CACHE="stock-watch-ai-v4-15";
-const ASSETS=["./","./index.html","./style.css?v=4.12","./app.js?v=4.12","./manifest.webmanifest","./icon.svg"];
+const CACHE="stock-watch-ai-v4-16";
+const ASSETS=["./","./index.html","./style.css?v=4.13","./app.js?v=4.13","./manifest.webmanifest","./icon.svg"];
 self.addEventListener("install",e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)))});
 self.addEventListener("activate",e=>e.waitUntil(Promise.all([caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith("stock-watch-ai-")&&k!==CACHE).map(k=>caches.delete(k)))),self.clients.claim()])));
 self.addEventListener("fetch",e=>{

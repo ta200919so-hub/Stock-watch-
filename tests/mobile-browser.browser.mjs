@@ -121,9 +121,10 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         await oldRequest;
         await page.locator("#name").fill("新しい");
         await page.locator('.suggestion[data-symbol="NEW"]').waitFor({timeout:10000});
-        releaseOld();
-        await page.waitForResponse(res=>res.url().includes("/api/search?")&&
+        const oldResponse=page.waitForResponse(res=>res.url().includes("/api/search?")&&
           new URL(res.url()).searchParams.get("q")==="古い");
+        releaseOld();
+        await oldResponse;
         await page.waitForTimeout(100);
         assert.equal(await page.locator('.suggestion[data-symbol="OLD"]').count(),0);
         assert.equal(await page.locator('.suggestion[data-symbol="NEW"]').count(),1);

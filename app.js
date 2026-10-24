@@ -232,6 +232,8 @@ async function searchStocks(){
 document.querySelectorAll(".filter").forEach(b=>b.addEventListener("click",()=>{filter=b.dataset.filter;document.querySelectorAll(".filter").forEach(x=>x.classList.remove("active"));b.classList.add("active");render()}));
 $("#openAdd").addEventListener("click",()=>$("#addDialog").showModal());
 $("#closeAdd").addEventListener("click",()=>{addSearchRequestId++;clearTimeout(searchTimer);$("#addDialog").close()});
+// Native Escape, form completion and programmatic closes must also invalidate pending searches.
+$("#addDialog").addEventListener("close",()=>{addSearchRequestId++;clearTimeout(searchTimer);$("#suggestions").hidden=true});
 $("#name").addEventListener("input",()=>{addSearchRequestId++;$("#symbol").value="";$("#selectedStock").hidden=true;$("#suggestions").hidden=true;clearTimeout(searchTimer);searchTimer=setTimeout(searchStocks,350)});
 $("#market").addEventListener("change",()=>{addSearchRequestId++;clearTimeout(searchTimer);$("#symbol").value="";$("#selectedStock").hidden=true;$("#suggestions").hidden=true;if($("#name").value.trim())searchStocks()});
 $("#suggestions").addEventListener("click",e=>{

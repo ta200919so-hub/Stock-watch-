@@ -36,7 +36,7 @@ function save(){
   try{
     const previous=localStorage.getItem(KEY);
     if(previous!==null){
-      try{if(Array.isArray(JSON.parse(previous)))localStorage.setItem(BACKUP_KEY,previous)}catch{}
+      try{const prior=JSON.parse(previous);if(Array.isArray(prior)&&prior.length>0)localStorage.setItem(BACKUP_KEY,previous)}catch{}
     }
     localStorage.setItem(KEY,JSON.stringify(stocks));
     return true;

@@ -20,13 +20,14 @@ function migrate(s){
     view:s.view||"—", ai:s.ai||"", updatedAt:null, legacy:true
   };
 }
+const validStoredHolding=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
 function readStocks(){
   for(const key of [KEY,BACKUP_KEY]){
     try{
       const raw=localStorage.getItem(key);
       if(raw===null)continue;
       const parsed=JSON.parse(raw);
-      if(Array.isArray(parsed)){if(parsed.length===0)return [];const valid=parsed.filter(x=>x!==null&&typeof x==="object"&&!Array.isArray(x));if(valid.length)return valid.map(migrate);}
+      if(Array.isArray(parsed)){if(parsed.length===0)return [];const valid=parsed.filter(validStoredHolding);if(valid.length)return valid.map(migrate);}
     }catch(e){console.warn("Portfolio recovery failed for",key,e)}
   }
   return [];
@@ -36,7 +37,7 @@ function save(){
   try{
     const previous=localStorage.getItem(KEY);
     if(previous!==null){
-      try{const prior=JSON.parse(previous);if(Array.isArray(prior)&&prior.length>0)localStorage.setItem(BACKUP_KEY,previous)}catch{}
+      try{const prior=JSON.parse(previous);if(Array.isArray(prior)&&prior.some(validStoredHolding))localStorage.setItem(BACKUP_KEY,previous)}catch{}
     }
     localStorage.setItem(KEY,JSON.stringify(stocks));
     return true;

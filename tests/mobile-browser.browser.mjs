@@ -100,7 +100,8 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
       }finally{await context.close()}
     });
     await t.test("add-holding search ignores late network responses in Chromium",async()=>{
-      const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+      // Intercept the page fetches directly; service workers are covered by the PWA test below.
+      const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:"block"});
       let releaseOld;
       const oldBlocked=new Promise(resolve=>{releaseOld=resolve});
       try{
@@ -128,6 +129,7 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         await page.waitForTimeout(100);
         assert.equal(await page.locator('.suggestion[data-symbol="OLD"]').count(),0);
         assert.equal(await page.locator('.suggestion[data-symbol="NEW"]').count(),1);
+        await page.screenshot({path:resolve(screenshots,"add-search-390.png")});
         await page.locator('.suggestion[data-symbol="NEW"]').click();
         assert.equal(await page.locator("#symbol").inputValue(),"NEW");
         await page.locator("#name").fill("変更後");
@@ -139,7 +141,6 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         await page.waitForTimeout(450);
         assert.equal(await page.locator("#suggestions").isHidden(),true,
           "closing dialog must cancel delayed suggestions");
-        await page.screenshot({path:resolve(screenshots,"add-search-390.png")});
       }finally{releaseOld();await context.close()}
     });
     await t.test("corrupt primary recovers backup without modifying stored holdings",async()=>{

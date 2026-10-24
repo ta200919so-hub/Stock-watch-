@@ -178,3 +178,54 @@ test("leaving global search clears query, results and pending response",async()=
  await request;
  assert.equal(x.node("#globalSuggestions").innerHTML,"");
 });
+
+test("closing and reopening add dialog while quote is pending never saves stale holding",async()=>{
+ let releaseQuote;
+ const x=boot({},false,url=>url.startsWith("/api/quote")?
+   new Promise(resolve=>{releaseQuote=resolve}):
+   Promise.resolve({ok:true,json:async()=>({items:[]})}));
+ x.node("#symbol").value="AMAT";x.node("#market").value="US";
+ x.node("#name").value="AMAT";x.node("#shares").value="2";x.node("#purchasePrice").value="100";
+ x.node("#addDialog").open=true;
+ const pending=x.node("#addForm").handlers.submit({preventDefault(){},target:{reset(){}}});
+ assert.equal(typeof releaseQuote,"function");
+ x.node("#addDialog").open=false;
+ x.node("#addDialog").handlers.close();
+ x.node("#addDialog").open=true;
+ releaseQuote({ok:true,json:async()=>({priceJPY:200,dayChangePct:1})});
+ await pending;
+ assert.equal(x.stocks().length,0);
+ assert.equal(x.map.has(KEY),false,"cancelled request must not touch portfolio storage");
+});
+test("rapid double submit while quote is pending adds one holding",async()=>{
+ let releaseQuote,requests=0;
+ const x=boot({},false,url=>url.startsWith("/api/quote")?
+   (requests++,new Promise(resolve=>{releaseQuote=resolve})):
+   Promise.resolve({ok:true,json:async()=>({items:[]})}));
+ x.node("#symbol").value="AMAT";x.node("#market").value="US";
+ x.node("#name").value="AMAT";x.node("#shares").value="2";x.node("#purchasePrice").value="100";
+ x.node("#addDialog").open=true;
+ const event={preventDefault(){},target:{reset(){}}};
+ const first=x.node("#addForm").handlers.submit(event);
+ const second=x.node("#addForm").handlers.submit(event);
+ assert.equal(requests,1,"only one quote request may run for the same submission");
+ releaseQuote({ok:true,json:async()=>({priceJPY:200,dayChangePct:1})});
+ await Promise.all([first,second]);
+ assert.equal(x.stocks().length,1);
+ assert.equal(JSON.parse(x.map.get(KEY)).length,1);
+});
+test("editing the selected name cancels an in-flight add submission",async()=>{
+ let releaseQuote;
+ const x=boot({},false,url=>url.startsWith("/api/quote")?
+   new Promise(resolve=>{releaseQuote=resolve}):
+   Promise.resolve({ok:true,json:async()=>({items:[]})}));
+ x.node("#symbol").value="AMAT";x.node("#market").value="US";
+ x.node("#name").value="AMAT";x.node("#shares").value="2";x.node("#purchasePrice").value="100";
+ x.node("#addDialog").open=true;
+ const pending=x.node("#addForm").handlers.submit({preventDefault(){},target:{reset(){}}});
+ x.node("#name").value="MSFT";x.node("#name").handlers.input();
+ releaseQuote({ok:true,json:async()=>({priceJPY:200,dayChangePct:1})});
+ await pending;
+ assert.equal(x.stocks().length,0);
+ assert.equal(x.map.has(KEY),false);
+});

@@ -3,6 +3,8 @@ const BACKUP_KEY="stock-watch-ai-backup-v1";
 let filter="ALL";
 let searchTimer=null;
 let addSearchRequestId=0;
+let addSubmissionId=0;
+let addSubmissionPending=false;
 let detailFromSearch=false;
 const $=s=>document.querySelector(s);
 const yen=n=>"¥"+new Intl.NumberFormat("ja-JP",{maximumFractionDigits:0}).format(Number(n)||0);
@@ -231,26 +233,41 @@ async function searchStocks(){
 }
 document.querySelectorAll(".filter").forEach(b=>b.addEventListener("click",()=>{filter=b.dataset.filter;document.querySelectorAll(".filter").forEach(x=>x.classList.remove("active"));b.classList.add("active");render()}));
 $("#openAdd").addEventListener("click",()=>$("#addDialog").showModal());
-$("#closeAdd").addEventListener("click",()=>{addSearchRequestId++;clearTimeout(searchTimer);$("#addDialog").close()});
+function invalidatePendingAdd(){addSubmissionId++;addSubmissionPending=false}
+$("#closeAdd").addEventListener("click",()=>{invalidatePendingAdd();addSearchRequestId++;clearTimeout(searchTimer);$("#addDialog").close()});
 // Native Escape, form completion and programmatic closes must also invalidate pending searches.
-$("#addDialog").addEventListener("close",()=>{addSearchRequestId++;clearTimeout(searchTimer);$("#suggestions").hidden=true});
-$("#name").addEventListener("input",()=>{addSearchRequestId++;$("#symbol").value="";$("#selectedStock").hidden=true;$("#suggestions").hidden=true;clearTimeout(searchTimer);searchTimer=setTimeout(searchStocks,350)});
-$("#market").addEventListener("change",()=>{addSearchRequestId++;clearTimeout(searchTimer);$("#symbol").value="";$("#selectedStock").hidden=true;$("#suggestions").hidden=true;if($("#name").value.trim())searchStocks()});
+$("#addDialog").addEventListener("close",()=>{invalidatePendingAdd();addSearchRequestId++;clearTimeout(searchTimer);$("#suggestions").hidden=true});
+$("#name").addEventListener("input",()=>{invalidatePendingAdd();addSearchRequestId++;$("#symbol").value="";$("#selectedStock").hidden=true;$("#suggestions").hidden=true;clearTimeout(searchTimer);searchTimer=setTimeout(searchStocks,350)});
+$("#market").addEventListener("change",()=>{invalidatePendingAdd();addSearchRequestId++;clearTimeout(searchTimer);$("#symbol").value="";$("#selectedStock").hidden=true;$("#suggestions").hidden=true;if($("#name").value.trim())searchStocks()});
 $("#suggestions").addEventListener("click",e=>{
   const b=e.target.closest(".suggestion"); if(!b)return;
-  addSearchRequestId++;clearTimeout(searchTimer);
+  invalidatePendingAdd();addSearchRequestId++;clearTimeout(searchTimer);
   $("#name").value=b.dataset.name; $("#symbol").value=b.dataset.symbol;
   $("#selectedStock").textContent=`✓ ${b.dataset.name} を選択`; $("#selectedStock").hidden=false; $("#suggestions").hidden=true;
 });
 $("#addForm").addEventListener("submit",async e=>{
   e.preventDefault();
+  // Ignore rapid double taps while the quote is loading.
+  if(addSubmissionPending)return;
   if(!$("#symbol").value){status("銘柄名を検索し、候補から選択してください。","error");return}
+  const requestId=++addSubmissionId;
+  addSubmissionPending=true;
   const s={market:$("#market").value,name:$("#name").value.trim(),symbol:$("#symbol").value,purchasePriceJPY:Number($("#purchasePrice").value),shares:Number($("#shares").value),purchaseDate:"",currentPriceJPY:0,memo:$("#memo").value.trim(),updatedAt:null};
   status("現在株価を取得中…");
-  try{await refreshOne(s)}catch(err){status("銘柄は追加しましたが、現在株価を取得できませんでした。","error")}
-  stocks.unshift(s);if(!save()){stocks.shift();return}render();e.target.reset();$("#symbol").value="";$("#selectedStock").hidden=true;$("#addDialog").close();
-  if(s.currentPriceJPY)status("追加しました。現在株価も取得済みです。","ok");
-  setTimeout(()=>status(""),2500);
+  try{
+    let quoteFailed=false;
+    try{await refreshOne(s)}catch(err){quoteFailed=true}
+    // A closed/reopened dialog or changed selection must never save a stale submission.
+    if(requestId!==addSubmissionId||!$("#addDialog").open)return;
+    if(quoteFailed)status("銘柄は追加しましたが、現在株価を取得できませんでした。","error");
+    stocks.unshift(s);
+    if(!save()){stocks.shift();return}
+    render();e.target.reset();$("#symbol").value="";$("#selectedStock").hidden=true;$("#addDialog").close();
+    if(s.currentPriceJPY)status("追加しました。現在株価も取得済みです。","ok");
+    setTimeout(()=>status(""),2500);
+  }finally{
+    if(requestId===addSubmissionId)addSubmissionPending=false;
+  }
 });
 $("#list").addEventListener("click",e=>{
   const edit=e.target.closest("[data-edit]");

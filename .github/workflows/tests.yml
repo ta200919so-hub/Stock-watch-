@@ -1,19 +1,9 @@
 name: Stock Watch AI checks
 on:
   pull_request:
-    paths:
-      - "app.js"
-      - "sw.js"
-      - "index.html"
-      - "manifest.webmanifest"
-      - "style.css"
-      - "icon.svg"
-      - "api/**"
-      - "tests/**"
-      - ".github/workflows/tests.yml"
   push:
     branches:
-      - "feat/safe-storage-search-20261011"
+      - main
 jobs:
   test:
     runs-on: ubuntu-latest

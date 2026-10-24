@@ -20,7 +20,7 @@ function migrate(s){
     view:s.view||"—", ai:s.ai||"", updatedAt:null, legacy:true
   };
 }
-const validStoredHolding=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
+const validStoredHolding=x=>x!==null&&typeof x==="object"&&!Array.isArray(x)&&["symbol","ticker","name"].some(k=>typeof x[k]==="string"&&x[k].trim().length>0);
 function readStocks(){
   for(const key of [KEY,BACKUP_KEY]){
     try{

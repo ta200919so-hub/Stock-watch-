@@ -111,6 +111,31 @@ test("backup still captures a previous portfolio with some invalid entries",()=>
  assert.equal(vm.runInContext("save()",x.context),true);
  assert.equal(JSON.parse(x.map.get(BACKUP))[1].symbol,"AMAT");
 });
+test("empty-object primary does not hide a recoverable portfolio backup",()=>{
+  const x=boot({[KEY]:JSON.stringify([{}]),[BACKUP]:JSON.stringify([holding])});
+  assert.equal(x.stocks().length,1);
+  assert.equal(x.stocks()[0].symbol,"AMAT");
+  x.stocks().push({...holding,symbol:"MSFT",name:"Microsoft"});
+  assert.equal(vm.runInContext("save()",x.context),true);
+  assert.equal(JSON.parse(x.map.get(BACKUP))[0].symbol,"AMAT",
+    "a malformed primary must not replace the only valid backup");
+});
+test("unrecognizable primary or backup objects never authorize overwriting data",()=>{
+  for(const corrupt of ['[{}]','[{"unexpected":1}]']){
+    const x=boot({[KEY]:corrupt,[BACKUP]:'[{}]'});
+    x.stocks().push({...holding});
+    assert.equal(vm.runInContext("save()",x.context),false);
+    assert.equal(x.map.get(KEY),corrupt);
+    assert.equal(x.map.get(BACKUP),'[{}]');
+  }
+});
+test("legacy holdings identified by company name remain recoverable",()=>{
+  const x=boot({[KEY]:JSON.stringify([{name:"旧銘柄",start:100,current:110}])});
+  assert.equal(x.stocks().length,1);
+  assert.equal(x.stocks()[0].name,"旧銘柄");
+  assert.equal(x.stocks()[0].purchasePriceJPY,100);
+});
+
 test("search result detail back returns to search",async()=>{
  const x=boot();
  await vm.runInContext('renderExternalDetail({symbol:"AMAT",name:"AMAT",market:"US",currentPriceJPY:200})',x.context);

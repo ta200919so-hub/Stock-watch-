@@ -134,3 +134,18 @@ test("editing a selected stock name immediately clears ticker and ignores late s
  assert.equal(x.node("#suggestions").hidden,true);
  assert.doesNotMatch(x.node("#suggestions").innerHTML,/AMAT/);
 });
+
+test("closing add dialog with Escape invalidates pending search results",async()=>{
+ let release;
+ const x=boot({},false,()=>new Promise(resolve=>{release=resolve}));
+ x.node("#name").value="AMAT";
+ x.node("#addDialog").open=true;
+ const pending=vm.runInContext("searchStocks()",x.context);
+ x.node("#addDialog").open=false;
+ x.node("#addDialog").handlers.close();
+ assert.equal(x.node("#suggestions").hidden,true);
+ release({ok:true,json:async()=>({results:[{symbol:"AMAT",name:"Applied Materials"}]})});
+ await pending;
+ assert.equal(x.node("#suggestions").hidden,true);
+ assert.doesNotMatch(x.node("#suggestions").innerHTML,/AMAT/);
+});

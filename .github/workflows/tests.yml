@@ -32,3 +32,16 @@ jobs:
           node --check sw.js
       - name: Regression tests
         run: node --test tests/*.test.mjs
+      - name: Install Chromium browser test dependencies
+        run: |
+          npm install --no-save --package-lock=false playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Mobile browser integration
+        run: node --test tests/mobile-browser.browser.mjs
+      - name: Upload mobile viewport screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-viewport-screenshots
+          path: tests/screenshots/*.png
+          if-no-files-found: ignore

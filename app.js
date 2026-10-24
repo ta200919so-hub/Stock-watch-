@@ -34,6 +34,7 @@ function readStocks(){
 }
 let stocks=readStocks();
 function save(){
+  let oldBackup=null,backupUpdated=false;
   try{
     const previous=localStorage.getItem(KEY);
     if(previous!==null){
@@ -49,11 +50,27 @@ function save(){
           return false;
         }
       }
-      if(Array.isArray(prior)&&prior.some(validStoredHolding))localStorage.setItem(BACKUP_KEY,previous);
+      if(Array.isArray(prior)&&prior.some(validStoredHolding)){
+        oldBackup=localStorage.getItem(BACKUP_KEY);
+        localStorage.setItem(BACKUP_KEY,previous);
+        backupUpdated=true;
+      }
     }
     localStorage.setItem(KEY,JSON.stringify(stocks));
     return true;
-  }catch(e){console.error("Portfolio save failed",e);alert("保有データを保存できませんでした。端末の空き容量とブラウザ設定を確認してください。");return false}
+  }catch(e){
+    // If writing the new primary failed, retain the older recovery snapshot.
+    // localStorage writes are atomic per key, but not across both keys.
+    if(backupUpdated){
+      try{
+        if(oldBackup===null)localStorage.removeItem(BACKUP_KEY);
+        else localStorage.setItem(BACKUP_KEY,oldBackup);
+      }catch(rollbackError){console.error("Portfolio backup rollback failed",rollbackError)}
+    }
+    console.error("Portfolio save failed",e);
+    alert("保有データを保存できませんでした。端末の空き容量とブラウザ設定を確認してください。");
+    return false;
+  }
 }
 function pnlPct(s){
   if(!s.shares||!s.purchasePriceJPY||!s.currentPriceJPY)return null;

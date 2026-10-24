@@ -21,7 +21,8 @@ function boot(storage={},failPrimary=false,request){
  const document={querySelector(key){if(!nodes.has(key))nodes.set(key,element());return nodes.get(key)},
   querySelectorAll(){return []},createElement(){return element()}};
  const localStorage={getItem(key){return map.has(key)?map.get(key):null},
-  setItem(key,value){if(failPrimary&&key===KEY)throw Error("storage full");map.set(key,String(value))}};
+  setItem(key,value){if(failPrimary&&key===KEY)throw Error("storage full");map.set(key,String(value))},
+  removeItem(key){map.delete(key)}};
  const fetch=request||(async url=>({ok:true,json:async()=>url.startsWith("/api/quote")?
    {priceJPY:200,dayChangePct:1}:url.startsWith("/api/search")?{results:[]}:url.startsWith("/api/history")?
    {points:[{date:"2026-10-01",priceJPY:100},{date:"2026-10-02",priceJPY:110}]}:{items:[]}}));
@@ -85,6 +86,24 @@ test("unrecoverable primary and invalid backup are both preserved",()=>{
  assert.equal(vm.runInContext("save()",x.context),false);
  assert.equal(x.map.get(KEY),"{broken");
  assert.equal(x.map.get(BACKUP),"[null]");
+});
+test("failed primary write keeps the previous recovery snapshot",()=>{
+ const older={...holding,symbol:"OLD",name:"Older recovery"};
+ const original=JSON.stringify([holding]), backup=JSON.stringify([older]);
+ const x=boot({[KEY]:original,[BACKUP]:backup},true);
+ x.stocks().push({...holding,symbol:"MSFT",name:"Microsoft"});
+ assert.equal(vm.runInContext("save()",x.context),false);
+ assert.equal(x.map.get(KEY),original,"failed write must preserve primary");
+ assert.equal(x.map.get(BACKUP),backup,"failed write must restore older backup");
+ assert.equal(x.alerts.length,1);
+});
+test("failed primary write removes only the newly staged backup when none existed",()=>{
+ const original=JSON.stringify([holding]);
+ const x=boot({[KEY]:original},true);
+ x.stocks().push({...holding,symbol:"MSFT",name:"Microsoft"});
+ assert.equal(vm.runInContext("save()",x.context),false);
+ assert.equal(x.map.get(KEY),original);
+ assert.equal(x.map.has(BACKUP),false,"failed write must not leave a new backup");
 });
 test("failed automatic refresh does not claim holdings were saved",async()=>{
  const x=boot({[KEY]:JSON.stringify([holding])},true);

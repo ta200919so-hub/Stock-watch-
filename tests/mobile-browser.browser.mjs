@@ -143,6 +143,36 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
           "closing dialog must cancel delayed suggestions");
       }finally{releaseOld();await context.close()}
     });
+    await t.test("global search rejects late results after typing and clears on back",async()=>{
+      const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:"block"});
+      let releaseOld;
+      const oldBlocked=new Promise(resolve=>{releaseOld=resolve});
+      try{
+        const page=await context.newPage();
+        await page.route("**/api/search?*",async route=>{
+          const q=new URL(route.request().url()).searchParams.get("q");
+          if(q==="古い"){await oldBlocked;return route.fulfill({json:{results:[{symbol:"OLD",name:"古い会社"}]}})}
+          return route.fulfill({json:{results:[{symbol:"NEW",name:"新しい会社"}]}});
+        });
+        await page.goto(base);
+        await page.locator("#openSearch").click();
+        const oldRequest=page.waitForRequest(req=>req.url().includes("/api/search?")&&
+          new URL(req.url()).searchParams.get("q")==="古い");
+        await page.locator("#globalSearch").fill("古い");
+        await oldRequest;
+        await page.locator("#globalSearch").fill("新しい");
+        const oldResponse=page.waitForResponse(res=>res.url().includes("/api/search?")&&
+          new URL(res.url()).searchParams.get("q")==="古い");
+        releaseOld();
+        await oldResponse;
+        await page.locator('.global-result[data-symbol="NEW"]').first().waitFor({timeout:10000});
+        assert.equal(await page.locator('.global-result[data-symbol="OLD"]').count(),0);
+        await page.locator("#searchBack").click();
+        assert.equal(await page.locator("#globalSearch").inputValue(),"");
+        await page.locator("#openSearch").click();
+        assert.equal(await page.locator(".global-result").count(),0);
+      }finally{releaseOld();await context.close()}
+    });
     await t.test("corrupt primary recovers backup without modifying stored holdings",async()=>{
       const context=await browser.newContext({viewport:{width:375,height:812},isMobile:true,hasTouch:true});
       try{
@@ -162,7 +192,7 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
           await navigator.serviceWorker.ready;
           return await caches.keys();
         });
-        assert.ok(cache.includes("stock-watch-ai-v4-11"),"PWA revision must install");
+        assert.ok(cache.includes("stock-watch-ai-v4-12"),"PWA revision must install");
       }finally{await context.close()}
     });
   }finally{

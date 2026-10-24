@@ -264,13 +264,13 @@ $("#editForm").addEventListener("submit",e=>{e.preventDefault();const i=Number($
 
 let globalSearchTimer=null;let globalSearchRequestId=0;
 function showSearch(){const v=$("#searchView");if(!v)return;$("#homeView").hidden=true;$("#detailView").hidden=true;v.hidden=false;window.scrollTo(0,0);setTimeout(()=>$("#globalSearch")?.focus(),50)}
-function closeSearch(){globalSearchRequestId++;const v=$("#searchView");if(v)v.hidden=true;$("#detailView").hidden=true;$("#homeView").hidden=false;window.scrollTo(0,0)}
+function closeSearch(){globalSearchRequestId++;clearTimeout(globalSearchTimer);const v=$("#searchView");if(v)v.hidden=true;$("#globalSuggestions").innerHTML="";$("#globalSearch").value="";$("#detailView").hidden=true;$("#homeView").hidden=false;window.scrollTo(0,0)}
 async function globalSearch(){
  const input=$("#globalSearch"),box=$("#globalSuggestions");if(!input||!box)return;const q=input.value.trim();const requestId=++globalSearchRequestId;if(!q){box.innerHTML="";return}
  let all=[];
- for(const market of ["JP","US"]){try{const r=await fetch(`/api/search?q=${encodeURIComponent(q)}&market=${market}`);if(r.ok){const d=await r.json();all.push(...(d.results||[]).map(x=>({...x,market})))}}catch{}}
+ for(const market of ["JP","US"]){try{const r=await fetch(`/api/search?q=${encodeURIComponent(q)}&market=${market}`);if(requestId!==globalSearchRequestId||q!==input.value.trim())return;if(r.ok){const d=await r.json();if(requestId!==globalSearchRequestId||q!==input.value.trim())return;all.push(...(d.results||[]).map(x=>({...x,market})))}}catch{}}
  const seen=new Set();all=all.filter(x=>x.symbol&&!seen.has(x.symbol)&&(seen.add(x.symbol),true)).slice(0,10);
- if(requestId!==globalSearchRequestId)return;box.innerHTML=all.length?all.map(x=>`<button type="button" class="suggestion global-result" data-symbol="${escapeHtml(x.symbol)}" data-name="${escapeHtml(x.name)}" data-market="${x.market}"><strong>${escapeHtml(x.name)}</strong><span>${x.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"} · ${escapeHtml(x.symbol)}</span></button>`).join(""):'<div class="no-result">候補が見つかりません</div>';
+ if(requestId!==globalSearchRequestId||q!==input.value.trim())return;box.innerHTML=all.length?all.map(x=>`<button type="button" class="suggestion global-result" data-symbol="${escapeHtml(x.symbol)}" data-name="${escapeHtml(x.name)}" data-market="${x.market}"><strong>${escapeHtml(x.name)}</strong><span>${x.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"} · ${escapeHtml(x.symbol)}</span></button>`).join(""):'<div class="no-result">候補が見つかりません</div>';
 }
 async function renderExternalDetail(temp){
  detailFromSearch=true;
@@ -281,7 +281,7 @@ async function renderExternalDetail(temp){
 }
 $("#openSearch")?.addEventListener("click",showSearch);
 $("#searchBack")?.addEventListener("click",closeSearch);
-$("#globalSearch")?.addEventListener("input",()=>{clearTimeout(globalSearchTimer);globalSearchTimer=setTimeout(globalSearch,300)});
+$("#globalSearch")?.addEventListener("input",()=>{globalSearchRequestId++;$("#globalSuggestions").innerHTML="";clearTimeout(globalSearchTimer);globalSearchTimer=setTimeout(globalSearch,300)});
 $("#globalSuggestions")?.addEventListener("click",async e=>{const b=e.target.closest(".global-result");if(!b)return;const temp={market:b.dataset.market,name:b.dataset.name,symbol:b.dataset.symbol,purchasePriceJPY:0,shares:null,currentPriceJPY:0,updatedAt:null};try{await refreshOne(temp);await renderExternalDetail(temp)}catch{alert("分析データを取得できませんでした。")}});
 
 $("#refreshBtn").addEventListener("click",refreshAll);

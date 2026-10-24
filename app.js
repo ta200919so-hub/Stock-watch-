@@ -224,6 +224,8 @@ async function refreshOne(s){
   const r=await fetchTimeout(`/api/quote?symbol=${encodeURIComponent(s.symbol)}&market=${s.market}`);
   if(!r.ok)throw new Error("quote");
   const q=await r.json();
+  // A malformed successful response must not erase a previously saved valuation.
+  if(!Number.isFinite(q?.priceJPY)||q.priceJPY<=0)throw new Error("invalid_quote");
   s.currentPriceJPY=q.priceJPY;
   s.dayChangePct=Number.isFinite(q.dayChangePct)?q.dayChangePct:null;
   try{const fr=await fetchTimeout(`/api/fundamentals?symbol=${encodeURIComponent(s.symbol)}&market=${s.market}`);if(fr.ok)s.fundamentals=await fr.json()}catch(e){}

@@ -320,7 +320,7 @@ function showAnalytics(s){
      const axis=formatPriceAxis(min,max);
      const chartLeft=106,chartRight=340,chartTop=12,chartBottom=172;
      const coords=points.map((p,i)=>(chartLeft+(i/(points.length-1))*(chartRight-chartLeft)).toFixed(2)+","+(chartBottom-((p.priceJPY-min)/spread)*(chartBottom-chartTop)).toFixed(2)).join(" ");
-     const ticks=Array.from({length:5},(_,i)=>{const y=chartTop+(chartBottom-chartTop)*i;return '<line x1="'+chartLeft+'" y1="'+y+'" x2="'+chartRight+'" y2="'+y+'" stroke="#929bb3" stroke-opacity=".22" stroke-dasharray="3 4"/><text x="'+(chartLeft-7)+'" y="'+(y+4)+'" text-anchor="end" fill="#b8c0d6" font-size="11">'+escapeHtml(axis.labels[i])+'</text>'}).join("");
+     const ticks=Array.from({length:5},(_,i)=>{const y=chartTop+(chartBottom-chartTop)*i/4;return '<line x1="'+chartLeft+'" y1="'+y+'" x2="'+chartRight+'" y2="'+y+'" stroke="#929bb3" stroke-opacity=".22" stroke-dasharray="3 4"/><text x="'+(chartLeft-7)+'" y="'+(y+4)+'" text-anchor="end" fill="#b8c0d6" font-size="11">'+escapeHtml(axis.labels[i])+'</text>'}).join("");
      target.innerHTML='<svg viewBox="0 0 358 190" role="img" aria-label="株価推移。縦軸は円、横軸は日付"><text x="5" y="11" fill="#b8c0d6" font-size="10">円</text>'+ticks+'<polyline points="'+coords+'" fill="none" stroke="#7c8cff" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></svg><div class="chart-labels"><span>'+escapeHtml(points[0].date)+'</span><span>'+escapeHtml(points[Math.floor((points.length-1)/2)].date)+'</span><span>'+escapeHtml(points[points.length-1].date)+'</span></div><p class="muted">'+escapeHtml(axis.caption)+'</p>';
    }catch{if(seq===analyticsRequest)target.textContent="株価推移を取得できませんでした。"}
  }

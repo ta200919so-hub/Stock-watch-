@@ -23,6 +23,7 @@ test('invalid chart ranges are rejected',()=>{
 });
 test('production SVG reserves label gutter and renders units',()=>{
  assert.match(app,/const chartLeft=106,chartRight=340/);
+ assert.match(app,/const y=chartTop\+\(chartBottom-chartTop\)\*i\/4;/);
  assert.match(app,/viewBox="0 0 358 190"/);
  assert.match(app,/escapeHtml\(axis\.caption\)/);
 });

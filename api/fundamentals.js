@@ -3,7 +3,7 @@ const n=v=>{if(v==null||v==="")return null;const x=Number(v?.raw??v);return Numb
 async function chart(symbol,range="1y"){const j=await getJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${range}`);return j?.chart?.result?.[0]||null}
 async function timeseries(symbol,types){const now=Math.floor(Date.now()/1000),start=now-86400*900;const j=await getJson(`https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(symbol)}?symbol=${encodeURIComponent(symbol)}&type=${types.join(",")}&period1=${start}&period2=${now}`);return j?.timeseries?.result||[]}
 const latest=(rows,type)=>{const r=rows.find(x=>x.meta?.type?.[0]===type||x[type]);const a=r?.[type];return Array.isArray(a)&&a.length?n(a[a.length-1]?.reportedValue):null};
-async function fxJPY(){try{return n((await chart("JPY=X","5d"))?.meta?.regularMarketPrice)||null}catch{return null}}
+async function fxJPY(){try{const rate=n((await chart("JPY=X","5d"))?.meta?.regularMarketPrice);return rate!==null&&rate>0?rate:null}catch{return null}}
 const currencyOf=(entries)=>{for(const x of entries){const c=x?.currencyCode||x?.currency||x?.reportedValue?.currencyCode;if(typeof c==="string"&&/^[A-Z]{3}$/.test(c))return c}return null};
 // ASML reports in EUR even when its NASDAQ-listed shares trade in USD.
 // Yahoo's fundamentals timeseries can omit the reporting-currency metadata.
@@ -54,7 +54,11 @@ export default async function handler(req,res){
    out.trailingPE=out.trailingPE??n(sd.trailingPE);out.forwardPE=out.forwardPE??n(ks.forwardPE);out.marketCap=out.marketCap??n(sd.marketCap);out.profitMargin=out.profitMargin??n(fd.profitMargins);out.revenueGrowth=out.revenueGrowth??n(fd.revenueGrowth);out.earningsGrowth=out.earningsGrowth??n(fd.earningsGrowth);out.recommendationKey=fd.recommendationKey||null;out.targetMeanPrice=n(fd.targetMeanPrice);out.nextEarningsDate=n(ce.earnings?.earningsDate?.[0])||null;const last=eh[0]||{};const est=n(last.epsEstimate),act=n(last.epsActual);if(est!=null&&act!=null&&est!==0)out.earningsSurprisePct=(act-est)/Math.abs(est);out.source.push("Yahoo quoteSummary");
  }catch{}
  try{const c=await chart(symbol,"1y"),m=c?.meta||{},price=n(m.regularMarketPrice),eps=n(m.epsTrailingTwelveMonths);if(out.trailingPE==null&&price!=null&&eps)out.trailingPE=price/eps}catch{}
- const fx=market==="US"?await fxJPY():1;out.targetMeanPriceJPY=out.targetMeanPrice==null?null:out.targetMeanPrice*fx;
+ // Do not display a fictitious ¥0 target when USD/JPY is unavailable or invalid.
+ const fx=market==="US"?await fxJPY():market==="JP"?1:null;
+ const target=out.targetMeanPrice;
+ const convertedTarget=target!==null&&target>0&&fx!==null&&fx>0?target*fx:null;
+ out.targetMeanPriceJPY=convertedTarget!==null&&Number.isFinite(convertedTarget)?convertedTarget:null;
  out.unavailable=![out.trailingPE,out.forwardPE,out.marketCap,out.profitMargin,out.revenueGrowth,out.earningsGrowth,out.targetMeanPrice].some(v=>v!=null);
  res.setHeader("Cache-Control","s-maxage=300, stale-while-revalidate=600");return res.status(200).json(out);
 }

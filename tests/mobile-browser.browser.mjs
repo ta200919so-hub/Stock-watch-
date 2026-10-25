@@ -396,8 +396,11 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         await page.evaluate(data=>localStorage.setItem("stock-watch-ai-v1",JSON.stringify(data)),[sample[0]]);
         await page.reload();
         await page.evaluate(async()=>navigator.serviceWorker.ready);
-        // A ready registration alone does not guarantee the current page is controlled.
-        await page.waitForFunction(()=>navigator.serviceWorker.controller!==null,{timeout:10000});
+        // The first navigation may race SW installation. Verify an actual
+        // controller before switching offline, reloading once if necessary.
+        if(!await page.evaluate(()=>navigator.serviceWorker.controller!==null))
+          await page.reload({waitUntil:"load"});
+        await page.waitForFunction(()=>navigator.serviceWorker.controller!==null,null,{timeout:10000});
         await context.setOffline(true);
         await page.reload({waitUntil:"load"});
         assert.equal(await page.locator("#list .card").count(),1,

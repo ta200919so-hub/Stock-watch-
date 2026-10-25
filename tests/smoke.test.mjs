@@ -119,6 +119,15 @@ test("invalid successful quote responses never erase an existing portfolio price
   assert.match(x.node("#status").textContent,/株価を取得できませんでした/);
  }
 });
+test("failed quote refresh preserves both portfolio snapshots without backup rotation",async()=>{
+ const older={...holding,symbol:"OLD",name:"Older recovery"};
+ const primary=JSON.stringify([holding]),backup=JSON.stringify([older]);
+ const x=boot({[KEY]:primary,[BACKUP]:backup},false,async()=>({ok:false,json:async()=>({})}));
+ await vm.runInContext("refreshAll()",x.context);
+ assert.equal(x.map.get(KEY),primary,"failed refresh must not write unchanged primary");
+ assert.equal(x.map.get(BACKUP),backup,"failed refresh must not destroy the older recovery point");
+ assert.match(x.node("#status").textContent,/株価を取得できませんでした/);
+});
 test("failed automatic refresh does not claim holdings were saved",async()=>{
  const x=boot({[KEY]:JSON.stringify([holding])},true);
  await vm.runInContext("refreshAll()",x.context);

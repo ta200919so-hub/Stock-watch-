@@ -250,8 +250,10 @@ async function refreshAll(){
   let ok=0;
   try{
     for(const s of stocks){try{await refreshOne(s);ok++}catch(e){}}
+    // Failed quote requests must not rotate a valid recovery backup.
+    if(!ok){render();status("株価を取得できませんでした。もう一度お試しください。","error");return}
     const saved=save();render();
-    status(!saved?"株価は取得しましたが、保有データを保存できませんでした。":ok?`${ok}銘柄の株価を更新しました`:"株価を取得できませんでした。もう一度お試しください。",saved&&ok?"ok":"error");
+    status(!saved?"株価は取得しましたが、保有データを保存できませんでした。":`${ok}銘柄の株価を更新しました`,saved?"ok":"error");
   }finally{
     btn.disabled=false;btn.dataset.loading="0";
     setTimeout(()=>status(""),2500);

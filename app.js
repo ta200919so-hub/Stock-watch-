@@ -1,5 +1,7 @@
 const KEY="stock-watch-ai-v1";
 const BACKUP_KEY="stock-watch-ai-backup-v1";
+// Snapshot used for optimistic concurrency across tabs on the same device.
+let lastKnownPrimary=null;
 let filter="ALL";
 let searchTimer=null;
 let addSearchRequestId=0;
@@ -28,6 +30,7 @@ function readStocks(){
   for(const key of [KEY,BACKUP_KEY]){
     try{
       const raw=localStorage.getItem(key);
+      if(key===KEY)lastKnownPrimary=raw;
       if(raw===null)continue;
       const parsed=JSON.parse(raw);
       if(Array.isArray(parsed)){
@@ -48,6 +51,12 @@ function save(){
   let oldBackup=null,backupUpdated=false;
   try{
     const previous=localStorage.getItem(KEY);
+    // Another tab may have added/edited/deleted holdings since this tab loaded.
+    // Never replace that newer portfolio (or rotate its backup) with stale data.
+    if(previous!==lastKnownPrimary){
+      alert("別のタブで保有データが更新されています。データを守るため保存を中止しました。この画面を再読み込みしてから編集してください。");
+      return false;
+    }
     if(previous!==null){
       let prior;
       try{prior=JSON.parse(previous)}catch{}
@@ -67,7 +76,9 @@ function save(){
         backupUpdated=true;
       }
     }
-    localStorage.setItem(KEY,JSON.stringify(stocks));
+    const serialized=JSON.stringify(stocks);
+    localStorage.setItem(KEY,serialized);
+    lastKnownPrimary=serialized;
     return true;
   }catch(e){
     // If writing the new primary failed, retain the older recovery snapshot.

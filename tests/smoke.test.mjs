@@ -138,11 +138,37 @@ test("saving recovered holdings does not overwrite the only good backup with inv
  const recovered=boot(Object.fromEntries(x.map));
  assert.equal(recovered.stocks()[0].symbol,"AMAT");
 });
-test("backup still captures a previous portfolio with some invalid entries",()=>{
- const x=boot({[KEY]:JSON.stringify([null,holding])});
+test("partially corrupt primary is readable but never silently overwritten",()=>{
+ const mixed=JSON.stringify([null,holding,{unexpected:1}]);
+ const x=boot({[KEY]:mixed});
+ assert.equal(x.stocks().length,1,"recognizable holdings remain visible for recovery");
+ x.stocks().push({...holding,symbol:"MSFT",name:"Microsoft"});
+ assert.equal(vm.runInContext("save()",x.context),false);
+ assert.equal(x.map.get(KEY),mixed,"mixed primary must remain available for manual recovery");
+ assert.equal(x.map.has(BACKUP),false);
+ assert.equal(x.alerts.length,1);
+});
+test("complete backup wins over a partially corrupt primary and is preserved",()=>{
+ const mixed=JSON.stringify([null,{...holding,symbol:"PARTIAL"},42]);
+ const complete=JSON.stringify([holding]);
+ const x=boot({[KEY]:mixed,[BACKUP]:complete});
  assert.equal(x.stocks().length,1);
+ assert.equal(x.stocks()[0].symbol,"AMAT","prefer complete backup to partial primary");
+ x.stocks().push({...holding,symbol:"MSFT",name:"Microsoft"});
  assert.equal(vm.runInContext("save()",x.context),true);
- assert.equal(JSON.parse(x.map.get(BACKUP))[1].symbol,"AMAT");
+ assert.equal(JSON.parse(x.map.get(KEY)).length,2);
+ assert.equal(x.map.get(BACKUP),complete,"do not rotate a corrupt primary into backup");
+ x.map.set(KEY,"{broken");
+ assert.equal(boot(Object.fromEntries(x.map)).stocks()[0].symbol,"AMAT");
+});
+test("partial backup cannot authorize overwriting a corrupt primary",()=>{
+ const primary="{broken", backup=JSON.stringify([null,holding]);
+ const x=boot({[KEY]:primary,[BACKUP]:backup});
+ assert.equal(x.stocks().length,1);
+ x.stocks().push({...holding,symbol:"MSFT"});
+ assert.equal(vm.runInContext("save()",x.context),false);
+ assert.equal(x.map.get(KEY),primary);
+ assert.equal(x.map.get(BACKUP),backup);
 });
 test("empty-object primary does not hide a recoverable portfolio backup",()=>{
   const x=boot({[KEY]:JSON.stringify([{}]),[BACKUP]:JSON.stringify([holding])});

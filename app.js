@@ -328,19 +328,29 @@ async function refreshAll(){
 }
 async function searchStocks(){
   const requestId=++addSearchRequestId;
-  const q=$("#name").value.trim(), market=$("#market").value;
-  $("#symbol").value=""; $("#selectedStock").hidden=true;
-  if(q.length<1){$("#suggestions").hidden=true;return}
+  const q=$("#name").value.trim(),market=$("#market").value,box=$("#suggestions");
+  $("#symbol").value="";$("#selectedStock").hidden=true;
+  if(!q){box.innerHTML="";box.hidden=true;return}
+  // The add-holding search must be bounded just like global search on iPhone.
+  box.innerHTML='<div class="no-result">候補を検索中…</div>';box.hidden=false;
+  const isCurrent=()=>requestId===addSearchRequestId&&
+    q===$("#name").value.trim()&&market===$("#market").value;
   try{
-    const r=await fetch(`/api/search?q=${encodeURIComponent(q)}&market=${market}`);
-    if(!r.ok)throw new Error();
+    const r=await fetchTimeout(`/api/search?q=${encodeURIComponent(q)}&market=${market}`,7000);
+    if(!r.ok)throw new Error("search_unavailable");
     const data=await r.json();
-    if(requestId!==addSearchRequestId||q!==$("#name").value.trim()||market!==$("#market").value)return;
-    const box=$("#suggestions");
-    if(!data.results?.length){box.innerHTML='<div class="no-result">候補が見つかりません</div>';box.hidden=false;return}
-    box.innerHTML=data.results.map(x=>`<button type="button" class="suggestion" data-symbol="${escapeHtml(x.symbol)}" data-name="${escapeHtml(x.name)}"><strong>${escapeHtml(x.name)}</strong><span>${market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"}</span></button>`).join("");
+    if(!isCurrent())return;
+    const results=(Array.isArray(data?.results)?data.results:[])
+      .filter(x=>x&&typeof x.symbol==="string"&&x.symbol.trim()&&typeof x.name==="string")
+      .slice(0,10);
+    box.innerHTML=results.length?results.map(x=>`<button type="button" class="suggestion" data-symbol="${escapeHtml(x.symbol)}" data-name="${escapeHtml(x.name)}"><strong>${escapeHtml(x.name)}</strong><span>${market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"}</span></button>`).join(""):
+      '<div class="no-result">候補が見つかりません</div>';
     box.hidden=false;
-  }catch(e){if(requestId===addSearchRequestId)$("#suggestions").hidden=true}
+  }catch(e){
+    if(!isCurrent())return;
+    box.innerHTML='<div class="no-result">検索に失敗しました。通信状態を確認して再入力してください。</div>';
+    box.hidden=false;
+  }
 }
 document.querySelectorAll(".filter").forEach(b=>b.addEventListener("click",()=>{filter=b.dataset.filter;document.querySelectorAll(".filter").forEach(x=>x.classList.remove("active"));b.classList.add("active");render()}));
 $("#openAdd").addEventListener("click",()=>$("#addDialog").showModal());

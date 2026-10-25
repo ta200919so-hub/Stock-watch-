@@ -12,20 +12,24 @@ async function chart(symbol) {
 }
 
 export default async function handler(req, res) {
-  const symbol = String(req.query.symbol || "");
+  const symbol = String(req.query.symbol || "").trim().toUpperCase();
   const market = String(req.query.market || "JP");
 
-  if (!symbol) {
-    return res.status(400).json({ error: "symbol_required" });
+  if (!/^[A-Z0-9.^=-]{1,20}$/.test(symbol) || !["JP", "US"].includes(market)) {
+    return res.status(400).json({ error: "invalid_request" });
   }
 
   try {
     const meta = await chart(symbol);
     const raw = Number(meta?.regularMarketPrice);
-    const prev = Number(meta?.chartPreviousClose || meta?.previousClose || 0);
-    const dayChangePct = prev ? (raw / prev - 1) * 100 : null;
-
-    if (!raw) throw new Error("no_price");
+    const previous = Number(meta?.chartPreviousClose || meta?.previousClose || 0);
+    const prev = Number.isFinite(previous) && previous > 0 ? previous : null;
+    const expectedCurrency = market === "US" ? "USD" : "JPY";
+    // A valid price in the wrong currency would silently corrupt yen valuations.
+    if (!Number.isFinite(raw) || raw <= 0 || meta?.currency !== expectedCurrency) {
+      throw new Error("invalid_price_or_currency");
+    }
+    const dayChangePct = prev === null ? null : (raw / prev - 1) * 100;
 
     let fx = 1;
     let priceJPY = raw;
@@ -34,10 +38,13 @@ export default async function handler(req, res) {
       const fxMeta = await chart("JPY=X");
       fx = Number(fxMeta?.regularMarketPrice);
 
-      if (!fx) throw new Error("no_fx");
+      if (!Number.isFinite(fx) || fx <= 0 || fxMeta?.currency !== "JPY") {
+        throw new Error("invalid_fx");
+      }
 
       priceJPY = raw * fx;
     }
+    if (!Number.isFinite(priceJPY) || priceJPY <= 0) throw new Error("invalid_yen_price");
 
     res.setHeader(
       "Cache-Control",
@@ -51,7 +58,7 @@ export default async function handler(req, res) {
       priceJPY,
       currency: meta?.currency || null,
       marketTime: meta?.regularMarketTime || null,
-      previousClose: prev || null,
+      previousClose: prev,
       dayChangePct
     });
   } catch (e) {

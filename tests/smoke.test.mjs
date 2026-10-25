@@ -54,11 +54,13 @@ test("unknown quote never creates a fictitious 100% portfolio loss or allocation
  assert.equal(x.node("#donutTotal").textContent,"—");
  assert.equal(x.node("#holdingCount").textContent,"2銘柄");
  assert.match(x.node("#legend").innerHTML,/株価未取得/);
+ assert.doesNotMatch(x.node("#todayFocus").innerHTML,/保有比率/,"unknown holdings must not inflate the displayed concentration");
  assert.equal(JSON.parse(x.map.get(KEY)).length,2,"render must not alter stored holdings");
  const known=boot({[KEY]:JSON.stringify([holding])});
  assert.equal(known.node("#totalValue").textContent,"¥400");
  assert.equal(known.node("#totalPnl").textContent,"+¥200");
  assert.equal(known.node("#totalPnlPct").textContent,"+100.0%");
+ assert.match(known.node("#todayFocus").innerHTML,/保有比率/,"complete quotes still show concentration");
 });
 test("a wholly unpriced portfolio does not show a -100% loss",()=>{
  const x=boot({[KEY]:JSON.stringify([{...holding,currentPriceJPY:0}])});

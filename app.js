@@ -178,7 +178,7 @@ function portfolio(){
   const value=held.reduce((a,s)=>a+(s.currentPriceJPY||0)*s.shares,0);
   return {cost,value,pnl:value-cost,pct:cost?((value/cost)-1)*100:null};
 }
-function renderDetail(i){
+function renderDetail(i,skipFinancialRefresh=false){
   detailFromSearch=false;
   const s=stocks[i];if(!s)return;const c=autoComment(s),dec=decision(s),f=s.fundamentals||{};
   $("#detailTitle").textContent=displayName(s);$("#detailPrice").textContent=s.currentPriceJPY?yen(s.currentPriceJPY):"—";
@@ -189,6 +189,17 @@ function renderDetail(i){
     <section class="detail-section"><h3>最新ニュース</h3>${s.news?.length?`<div class="news-box">${s.news.slice(0,5).map(n=>`<a class="news-item" href="${escapeHtml(n.url||"#")}" target="_blank" rel="noopener"><div><span class="impact ${n.impact}">${n.impact==="positive"?"好材料":n.impact==="negative"?"悪材料":"中立"}</span><small>${escapeHtml(n.publisher||"News")}</small></div><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.reason)}</p></a>`).join("")}</div>`:'<p class="muted">ニュースデータ待ち</p>'}</section>`;
   showAnalytics(s);
   $("#homeView").hidden=true;$("#detailView").hidden=false;window.scrollTo(0,0);
+  // Existing holdings can contain pre-upgrade fundamentals in localStorage.
+  // Refresh the financial panel without touching the saved portfolio or its backup.
+  if(!skipFinancialRefresh&&Number.isFinite(f.quarterRevenue)&&!Number.isFinite(f.quarterRevenueJPY)){
+    const symbol=s.symbol;
+    fetchTimeout("/api/fundamentals?symbol="+encodeURIComponent(symbol)+"&market="+encodeURIComponent(s.market))
+      .then(r=>r.ok?r.json():null).then(next=>{
+        if(!next||stocks[i]!==s||s.symbol!==symbol||$("#detailView").hidden||detailFromSearch)return;
+        s.fundamentals={...s.fundamentals,...next};
+        renderDetail(i,true);
+      }).catch(()=>{});
+  }
 }
 function render(){
   const shown=stocks.filter(s=>filter==="ALL"||s.market===filter);

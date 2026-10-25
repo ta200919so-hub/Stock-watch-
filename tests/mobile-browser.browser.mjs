@@ -80,6 +80,7 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         await page.addInitScript(data=>localStorage.setItem("stock-watch-ai-v1",JSON.stringify(data)),[sample[0]]);
         await page.goto(base);
         await page.locator('[data-detail="0"]').click();
+        assert.equal(await page.locator("#openSearch").isHidden(),true,"floating search must not cover the detail chart");
         await page.locator(".history-chart svg").waitFor({timeout:10000});
         assert.equal(await page.locator(".history-chart svg text").count(),6);
         const tickBounds=await page.locator(".history-chart svg text").evaluateAll(nodes=>
@@ -92,12 +93,116 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         assert.equal(await page.locator(".chart-labels span").count(),3);
         await page.screenshot({path:resolve(screenshots,"chart-390.png")});
         await page.locator("#backHome").click();
+        assert.equal(await page.locator("#openSearch").isVisible(),true,"floating search returns on home");
         await page.locator("#openSearch").click();
+        assert.equal(await page.locator("#openSearch").isHidden(),true,"floating search must not obscure search results");
         await page.locator("#globalSearch").fill("トヨタ");
         await page.locator(".global-result").first().waitFor({timeout:10000});
         assert.equal(await page.locator(".global-result").first().getAttribute("data-symbol"),"7203.T");
         await page.screenshot({path:resolve(screenshots,"search-390.png")});
       }finally{await context.close()}
+    });
+    await t.test("add-holding search ignores late network responses in Chromium",async()=>{
+      // Intercept the page fetches directly; service workers are covered by the PWA test below.
+      const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:"block"});
+      let releaseOld;
+      const oldBlocked=new Promise(resolve=>{releaseOld=resolve});
+      try{
+        const page=await context.newPage();
+        await page.route("**/api/search?*",async route=>{
+          const q=new URL(route.request().url()).searchParams.get("q");
+          if(q==="古い"){
+            await oldBlocked;
+            return route.fulfill({json:{results:[{symbol:"OLD",name:"古い会社"}]}});
+          }
+          return route.fulfill({json:{results:[{symbol:"NEW",name:"新しい会社"}]}});
+        });
+        await page.goto(base);
+        await page.locator("#openAdd").click();
+        const oldRequest=page.waitForRequest(req=>req.url().includes("/api/search?")&&
+          new URL(req.url()).searchParams.get("q")==="古い");
+        await page.locator("#name").fill("古い");
+        await oldRequest;
+        await page.locator("#name").fill("新しい");
+        await page.locator('.suggestion[data-symbol="NEW"]').waitFor({timeout:10000});
+        const oldResponse=page.waitForResponse(res=>res.url().includes("/api/search?")&&
+          new URL(res.url()).searchParams.get("q")==="古い");
+        releaseOld();
+        await oldResponse;
+        await page.waitForTimeout(100);
+        assert.equal(await page.locator('.suggestion[data-symbol="OLD"]').count(),0);
+        assert.equal(await page.locator('.suggestion[data-symbol="NEW"]').count(),1);
+        await page.screenshot({path:resolve(screenshots,"add-search-390.png")});
+        await page.locator('.suggestion[data-symbol="NEW"]').click();
+        assert.equal(await page.locator("#symbol").inputValue(),"NEW");
+        await page.locator("#name").fill("変更後");
+        assert.equal(await page.locator("#symbol").inputValue(),"",
+          "editing the name must immediately invalidate selected ticker");
+        assert.equal(await page.locator("#selectedStock").isHidden(),true);
+        await page.keyboard.press("Escape");
+        assert.equal(await page.locator("#addDialog").evaluate(el=>el.open),false);
+        await page.waitForTimeout(450);
+        assert.equal(await page.locator("#suggestions").isHidden(),true,
+          "closing dialog must cancel delayed suggestions");
+      }finally{releaseOld();await context.close()}
+    });
+    await t.test("global search rejects late results after typing and clears on back",async()=>{
+      const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:"block"});
+      let releaseOld;
+      const oldBlocked=new Promise(resolve=>{releaseOld=resolve});
+      try{
+        const page=await context.newPage();
+        await page.route("**/api/search?*",async route=>{
+          const q=new URL(route.request().url()).searchParams.get("q");
+          if(q==="古い"){await oldBlocked;return route.fulfill({json:{results:[{symbol:"OLD",name:"古い会社"}]}})}
+          return route.fulfill({json:{results:[{symbol:"NEW",name:"新しい会社"}]}});
+        });
+        await page.goto(base);
+        await page.locator("#openSearch").click();
+        const oldRequest=page.waitForRequest(req=>req.url().includes("/api/search?")&&
+          new URL(req.url()).searchParams.get("q")==="古い");
+        await page.locator("#globalSearch").fill("古い");
+        await oldRequest;
+        await page.locator("#globalSearch").fill("新しい");
+        const oldResponse=page.waitForResponse(res=>res.url().includes("/api/search?")&&
+          new URL(res.url()).searchParams.get("q")==="古い");
+        releaseOld();
+        await oldResponse;
+        await page.locator('.global-result[data-symbol="NEW"]').first().waitFor({timeout:10000});
+        assert.equal(await page.locator('.global-result[data-symbol="OLD"]').count(),0);
+        await page.locator("#searchBack").click();
+        assert.equal(await page.locator("#globalSearch").inputValue(),"");
+        await page.locator("#openSearch").click();
+        assert.equal(await page.locator(".global-result").count(),0);
+      }finally{releaseOld();await context.close()}
+    });
+
+    await t.test("leaving global search during quote loading never opens stale detail",async()=>{
+      const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:"block"});
+      let releaseQuote;
+      const quoteGate=new Promise(resolve=>{releaseQuote=resolve});
+      try{
+        const page=await context.newPage();
+        await page.route("**/api/quote?*",async route=>{
+          await quoteGate;
+          await route.fulfill({json:{priceJPY:200,dayChangePct:1}});
+        });
+        await page.goto(base);
+        await page.locator("#openSearch").click();
+        await page.locator("#globalSearch").fill("トヨタ");
+        await page.locator(".global-result").first().waitFor({timeout:10000});
+        const quoteRequest=page.waitForRequest(req=>req.url().includes("/api/quote?"));
+        await page.locator(".global-result").first().click();
+        await quoteRequest;
+        await page.locator("#searchBack").click();
+        const quoteResponse=page.waitForResponse(res=>res.url().includes("/api/quote?"));
+        releaseQuote();
+        await quoteResponse;
+        await page.waitForTimeout(150);
+        assert.equal(await page.locator("#homeView").isHidden(),false);
+        assert.equal(await page.locator("#detailView").isHidden(),true);
+        assert.equal(await page.locator("#searchView").isHidden(),true);
+      }finally{releaseQuote();await context.close()}
     });
     await t.test("corrupt primary recovers backup without modifying stored holdings",async()=>{
       const context=await browser.newContext({viewport:{width:375,height:812},isMobile:true,hasTouch:true});
@@ -118,8 +223,36 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
           await navigator.serviceWorker.ready;
           return await caches.keys();
         });
-        assert.ok(cache.includes("stock-watch-ai-v4-10"),"PWA revision must install");
+        const swSource=await readFile(resolve(root,"sw.js"),"utf8");
+        const expectedCache=swSource.match(/^const CACHE="([^"]+)";/m)?.[1];
+        assert.ok(expectedCache,"PWA cache revision must be declared");
+        assert.ok(cache.includes(expectedCache),"PWA revision must install");
       }finally{await context.close()}
+    });
+    await t.test("PWA serves cached app and preserves holdings while offline",async()=>{
+      const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+      try{
+        const page=await context.newPage();
+        await page.goto(base);
+        await page.evaluate(data=>localStorage.setItem("stock-watch-ai-v1",JSON.stringify(data)),[sample[0]]);
+        await page.reload();
+        await page.evaluate(async()=>navigator.serviceWorker.ready);
+        // A ready registration alone does not guarantee the current page is controlled.
+        await page.waitForFunction(()=>navigator.serviceWorker.controller!==null,{timeout:10000});
+        await context.setOffline(true);
+        await page.reload({waitUntil:"load"});
+        assert.equal(await page.locator("#list .card").count(),1,
+          "offline PWA must render the saved portfolio without network access");
+        assert.equal(await page.locator("#openAdd").isVisible(),true,
+          "cached JavaScript and CSS must keep the offline app usable");
+        await page.locator("#openAdd").click();
+        assert.equal(await page.locator("#addDialog").evaluate(el=>el.open),true);
+        assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem("stock-watch-ai-v1"))[0].symbol),"AMAT",
+          "offline navigation must not erase locally stored holdings");
+      }finally{
+        await context.setOffline(false);
+        await context.close();
+      }
     });
   }finally{
     if(browser)await browser.close();

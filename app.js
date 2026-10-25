@@ -2,6 +2,10 @@ const KEY="stock-watch-ai-v1";
 const BACKUP_KEY="stock-watch-ai-backup-v1";
 let filter="ALL";
 let searchTimer=null;
+let addSearchRequestId=0;
+let addSubmissionId=0;
+let addSubmissionPending=false;
+let portfolioRevision=0;
 let detailFromSearch=false;
 const $=s=>document.querySelector(s);
 const yen=n=>"¥"+new Intl.NumberFormat("ja-JP",{maximumFractionDigits:0}).format(Number(n)||0);
@@ -17,27 +21,67 @@ function migrate(s){
     view:s.view||"—", ai:s.ai||"", updatedAt:null, legacy:true
   };
 }
+const validStoredHolding=x=>x!==null&&typeof x==="object"&&!Array.isArray(x)&&["symbol","ticker","name"].some(k=>typeof x[k]==="string"&&x[k].trim().length>0);
+const validStoredPortfolio=x=>Array.isArray(x)&&(x.length===0||x.every(validStoredHolding));
 function readStocks(){
+  let partial=null;
   for(const key of [KEY,BACKUP_KEY]){
     try{
       const raw=localStorage.getItem(key);
       if(raw===null)continue;
       const parsed=JSON.parse(raw);
-      if(Array.isArray(parsed)){if(parsed.length===0)return [];const valid=parsed.filter(x=>x!==null&&typeof x==="object"&&!Array.isArray(x));if(valid.length)return valid.map(migrate);}
+      if(Array.isArray(parsed)){
+        if(parsed.length===0){if(key===KEY||partial===null)return [];continue}
+        const valid=parsed.filter(validStoredHolding);
+        if(valid.length===parsed.length)return valid.map(migrate);
+        // Prefer a complete backup over a primary that would silently drop entries.
+        if(valid.length&&partial===null)partial=valid.map(migrate);
+      }
     }catch(e){console.warn("Portfolio recovery failed for",key,e)}
   }
-  return [];
+  // Show recognizable entries if no complete snapshot exists, but save() will
+  // refuse to overwrite the incomplete source until recovery is possible.
+  return partial||[];
 }
 let stocks=readStocks();
 function save(){
+  let oldBackup=null,backupUpdated=false;
   try{
     const previous=localStorage.getItem(KEY);
     if(previous!==null){
-      try{if(Array.isArray(JSON.parse(previous)))localStorage.setItem(BACKUP_KEY,previous)}catch{}
+      let prior;
+      try{prior=JSON.parse(previous)}catch{}
+      const validPrimary=validStoredPortfolio(prior);
+      if(!validPrimary){
+        // Do not destroy the only copy of a potentially recoverable portfolio.
+        let validBackup=false;
+        try{const backup=JSON.parse(localStorage.getItem(BACKUP_KEY));validBackup=Array.isArray(backup)&&backup.length>0&&backup.every(validStoredHolding)}catch{}
+        if(!validBackup){
+          alert("保有データを安全に復元できないため、既存の保存内容を上書きせず中止しました。");
+          return false;
+        }
+      }
+      if(Array.isArray(prior)&&prior.length>0&&prior.every(validStoredHolding)){
+        oldBackup=localStorage.getItem(BACKUP_KEY);
+        localStorage.setItem(BACKUP_KEY,previous);
+        backupUpdated=true;
+      }
     }
     localStorage.setItem(KEY,JSON.stringify(stocks));
     return true;
-  }catch(e){console.error("Portfolio save failed",e);alert("保有データを保存できませんでした。端末の空き容量とブラウザ設定を確認してください。");return false}
+  }catch(e){
+    // If writing the new primary failed, retain the older recovery snapshot.
+    // localStorage writes are atomic per key, but not across both keys.
+    if(backupUpdated){
+      try{
+        if(oldBackup===null)localStorage.removeItem(BACKUP_KEY);
+        else localStorage.setItem(BACKUP_KEY,oldBackup);
+      }catch(rollbackError){console.error("Portfolio backup rollback failed",rollbackError)}
+    }
+    console.error("Portfolio save failed",e);
+    alert("保有データを保存できませんでした。端末の空き容量とブラウザ設定を確認してください。");
+    return false;
+  }
 }
 function pnlPct(s){
   if(!s.shares||!s.purchasePriceJPY||!s.currentPriceJPY)return null;
@@ -191,6 +235,8 @@ async function refreshOne(s){
   const r=await fetchTimeout(`/api/quote?symbol=${encodeURIComponent(s.symbol)}&market=${s.market}`);
   if(!r.ok)throw new Error("quote");
   const q=await r.json();
+  // A malformed successful response must not erase a previously saved valuation.
+  if(!Number.isFinite(q?.priceJPY)||q.priceJPY<=0)throw new Error("invalid_quote");
   s.currentPriceJPY=q.priceJPY;
   s.dayChangePct=Number.isFinite(q.dayChangePct)?q.dayChangePct:null;
   try{const fr=await fetchTimeout(`/api/fundamentals?symbol=${encodeURIComponent(s.symbol)}&market=${s.market}`);if(fr.ok)s.fundamentals=await fr.json()}catch(e){}
@@ -202,17 +248,34 @@ async function refreshAll(){
   if(!stocks.length){status("保有銘柄がありません。","error");return}
   const btn=$("#refreshBtn");if(btn.dataset.loading==="1")return;
   btn.dataset.loading="1";btn.disabled=true;status("株価を更新中…");
+  // Work on copies: a pending quote must not mutate holdings before persistence.
+  const originalStocks=stocks,revision=portfolioRevision;
+  const refreshed=originalStocks.map(s=>({...s}));
   let ok=0;
   try{
-    for(const s of stocks){try{await refreshOne(s);ok++}catch(e){}}
-    save();render();
-    status(ok?`${ok}銘柄の株価を更新しました`:"株価を取得できませんでした。もう一度お試しください。",ok?"ok":"error");
+    for(const s of refreshed){
+      if(!s.symbol)continue;
+      try{await refreshOne(s);ok++}catch(e){}
+    }
+    // Editing, adding or deleting holdings during network requests wins over
+    // the stale refresh snapshot, including its backup rotation.
+    if(revision!==portfolioRevision||stocks!==originalStocks){
+      render();status("更新中に保有情報が変更されたため、古い株価の保存を中止しました。","error");return;
+    }
+    if(!ok){render();status("株価を取得できませんでした。もう一度お試しください。","error");return}
+    stocks=refreshed;
+    const saved=save();
+    if(!saved)stocks=originalStocks;
+    else portfolioRevision++;
+    render();
+    status(!saved?"株価は取得しましたが、保有データを保存できませんでした。":`${ok}銘柄の株価を更新しました`,saved?"ok":"error");
   }finally{
     btn.disabled=false;btn.dataset.loading="0";
     setTimeout(()=>status(""),2500);
   }
 }
 async function searchStocks(){
+  const requestId=++addSearchRequestId;
   const q=$("#name").value.trim(), market=$("#market").value;
   $("#symbol").value=""; $("#selectedStock").hidden=true;
   if(q.length<1){$("#suggestions").hidden=true;return}
@@ -220,51 +283,73 @@ async function searchStocks(){
     const r=await fetch(`/api/search?q=${encodeURIComponent(q)}&market=${market}`);
     if(!r.ok)throw new Error();
     const data=await r.json();
+    if(requestId!==addSearchRequestId||q!==$("#name").value.trim()||market!==$("#market").value)return;
     const box=$("#suggestions");
     if(!data.results?.length){box.innerHTML='<div class="no-result">候補が見つかりません</div>';box.hidden=false;return}
     box.innerHTML=data.results.map(x=>`<button type="button" class="suggestion" data-symbol="${escapeHtml(x.symbol)}" data-name="${escapeHtml(x.name)}"><strong>${escapeHtml(x.name)}</strong><span>${market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"}</span></button>`).join("");
     box.hidden=false;
-  }catch(e){$("#suggestions").hidden=true}
+  }catch(e){if(requestId===addSearchRequestId)$("#suggestions").hidden=true}
 }
 document.querySelectorAll(".filter").forEach(b=>b.addEventListener("click",()=>{filter=b.dataset.filter;document.querySelectorAll(".filter").forEach(x=>x.classList.remove("active"));b.classList.add("active");render()}));
 $("#openAdd").addEventListener("click",()=>$("#addDialog").showModal());
-$("#closeAdd").addEventListener("click",()=>$("#addDialog").close());
-$("#name").addEventListener("input",()=>{clearTimeout(searchTimer);searchTimer=setTimeout(searchStocks,350)});
-$("#market").addEventListener("change",()=>{$("#symbol").value="";$("#selectedStock").hidden=true;$("#suggestions").hidden=true;if($("#name").value.trim())searchStocks()});
+function invalidatePendingAdd(){addSubmissionId++;addSubmissionPending=false}
+// Changing purchase details while a quote is pending cancels the old snapshot.
+["#purchasePrice","#shares","#memo"].forEach(selector=>$(selector).addEventListener("input",invalidatePendingAdd));
+$("#closeAdd").addEventListener("click",()=>{invalidatePendingAdd();addSearchRequestId++;clearTimeout(searchTimer);$("#addDialog").close()});
+// Native Escape, form completion and programmatic closes must also invalidate pending searches.
+$("#addDialog").addEventListener("close",()=>{invalidatePendingAdd();addSearchRequestId++;clearTimeout(searchTimer);$("#suggestions").hidden=true});
+$("#name").addEventListener("input",()=>{invalidatePendingAdd();addSearchRequestId++;$("#symbol").value="";$("#selectedStock").hidden=true;$("#suggestions").hidden=true;clearTimeout(searchTimer);searchTimer=setTimeout(searchStocks,350)});
+$("#market").addEventListener("change",()=>{invalidatePendingAdd();addSearchRequestId++;clearTimeout(searchTimer);$("#symbol").value="";$("#selectedStock").hidden=true;$("#suggestions").hidden=true;if($("#name").value.trim())searchStocks()});
 $("#suggestions").addEventListener("click",e=>{
   const b=e.target.closest(".suggestion"); if(!b)return;
+  invalidatePendingAdd();addSearchRequestId++;clearTimeout(searchTimer);
   $("#name").value=b.dataset.name; $("#symbol").value=b.dataset.symbol;
   $("#selectedStock").textContent=`✓ ${b.dataset.name} を選択`; $("#selectedStock").hidden=false; $("#suggestions").hidden=true;
 });
 $("#addForm").addEventListener("submit",async e=>{
   e.preventDefault();
+  // Ignore rapid double taps while the quote is loading.
+  if(addSubmissionPending)return;
   if(!$("#symbol").value){status("銘柄名を検索し、候補から選択してください。","error");return}
+  const requestId=++addSubmissionId;
+  addSubmissionPending=true;
   const s={market:$("#market").value,name:$("#name").value.trim(),symbol:$("#symbol").value,purchasePriceJPY:Number($("#purchasePrice").value),shares:Number($("#shares").value),purchaseDate:"",currentPriceJPY:0,memo:$("#memo").value.trim(),updatedAt:null};
   status("現在株価を取得中…");
-  try{await refreshOne(s)}catch(err){status("銘柄は追加しましたが、現在株価を取得できませんでした。","error")}
-  stocks.unshift(s);if(!save()){stocks.shift();return}render();e.target.reset();$("#symbol").value="";$("#selectedStock").hidden=true;$("#addDialog").close();
-  if(s.currentPriceJPY)status("追加しました。現在株価も取得済みです。","ok");
-  setTimeout(()=>status(""),2500);
+  try{
+    let quoteFailed=false;
+    try{await refreshOne(s)}catch(err){quoteFailed=true}
+    // A closed/reopened dialog or changed selection must never save a stale submission.
+    if(requestId!==addSubmissionId||!$("#addDialog").open)return;
+    if(quoteFailed)status("銘柄は追加しましたが、現在株価を取得できませんでした。","error");
+    stocks.unshift(s);
+    if(!save()){stocks.shift();return}
+    portfolioRevision++;
+    render();e.target.reset();$("#symbol").value="";$("#selectedStock").hidden=true;$("#addDialog").close();
+    if(s.currentPriceJPY)status("追加しました。現在株価も取得済みです。","ok");
+    setTimeout(()=>status(""),2500);
+  }finally{
+    if(requestId===addSubmissionId)addSubmissionPending=false;
+  }
 });
 $("#list").addEventListener("click",e=>{
   const edit=e.target.closest("[data-edit]");
   if(edit){const i=Number(edit.dataset.edit),s=stocks[i];$("#editIndex").value=i;$("#editStockName").textContent=displayName(s);$("#editPurchasePrice").value=s.purchasePriceJPY||"";$("#editShares").value=s.shares||"";$("#editPurchaseDate").value=s.purchaseDate||"";$("#editMemo").value=s.memo||"";$("#editDialog").showModal();return}
-  const b=e.target.closest("[data-del]");if(b){if(confirm("この銘柄を削除しますか？")){const old=stocks.slice();stocks.splice(Number(b.dataset.del),1);if(!save())stocks=old;render()}return}
+  const b=e.target.closest("[data-del]");if(b){if(confirm("この銘柄を削除しますか？")){const old=stocks.slice();stocks.splice(Number(b.dataset.del),1);if(!save())stocks=old;else portfolioRevision++;render()}return}
   const card=e.target.closest("[data-detail]");if(card)renderDetail(Number(card.dataset.detail));
 });
 $("#backHome").addEventListener("click",()=>{$("#detailView").hidden=true;const sv=$("#searchView");if(sv&&detailFromSearch){sv.hidden=false;$("#homeView").hidden=true}else{$("#homeView").hidden=false}detailFromSearch=false;window.scrollTo(0,0)});
 $("#closeEdit").addEventListener("click",()=>$("#editDialog").close());
-$("#editForm").addEventListener("submit",e=>{e.preventDefault();const i=Number($("#editIndex").value),s=stocks[i];if(!s)return;const old={purchasePriceJPY:s.purchasePriceJPY,shares:s.shares,purchaseDate:s.purchaseDate,memo:s.memo};s.purchasePriceJPY=Number($("#editPurchasePrice").value);s.shares=Number($("#editShares").value);s.purchaseDate=$("#editPurchaseDate").value;s.memo=$("#editMemo").value.trim();if(!save()){Object.assign(s,old);return}render();$("#editDialog").close();status("保有情報を更新しました。","ok");setTimeout(()=>status(""),2000)});
+$("#editForm").addEventListener("submit",e=>{e.preventDefault();const i=Number($("#editIndex").value),s=stocks[i];if(!s)return;const old={purchasePriceJPY:s.purchasePriceJPY,shares:s.shares,purchaseDate:s.purchaseDate,memo:s.memo};s.purchasePriceJPY=Number($("#editPurchasePrice").value);s.shares=Number($("#editShares").value);s.purchaseDate=$("#editPurchaseDate").value;s.memo=$("#editMemo").value.trim();if(!save()){Object.assign(s,old);return}portfolioRevision++;render();$("#editDialog").close();status("保有情報を更新しました。","ok");setTimeout(()=>status(""),2000)});
 
-let globalSearchTimer=null;let globalSearchRequestId=0;
+let globalSearchTimer=null;let globalSearchRequestId=0;let globalDetailRequestId=0;
 function showSearch(){const v=$("#searchView");if(!v)return;$("#homeView").hidden=true;$("#detailView").hidden=true;v.hidden=false;window.scrollTo(0,0);setTimeout(()=>$("#globalSearch")?.focus(),50)}
-function closeSearch(){globalSearchRequestId++;const v=$("#searchView");if(v)v.hidden=true;$("#detailView").hidden=true;$("#homeView").hidden=false;window.scrollTo(0,0)}
+function closeSearch(){globalDetailRequestId++;globalSearchRequestId++;clearTimeout(globalSearchTimer);const v=$("#searchView");if(v)v.hidden=true;$("#globalSuggestions").innerHTML="";$("#globalSearch").value="";$("#detailView").hidden=true;$("#homeView").hidden=false;window.scrollTo(0,0)}
 async function globalSearch(){
  const input=$("#globalSearch"),box=$("#globalSuggestions");if(!input||!box)return;const q=input.value.trim();const requestId=++globalSearchRequestId;if(!q){box.innerHTML="";return}
  let all=[];
- for(const market of ["JP","US"]){try{const r=await fetch(`/api/search?q=${encodeURIComponent(q)}&market=${market}`);if(r.ok){const d=await r.json();all.push(...(d.results||[]).map(x=>({...x,market})))}}catch{}}
+ for(const market of ["JP","US"]){try{const r=await fetch(`/api/search?q=${encodeURIComponent(q)}&market=${market}`);if(requestId!==globalSearchRequestId||q!==input.value.trim())return;if(r.ok){const d=await r.json();if(requestId!==globalSearchRequestId||q!==input.value.trim())return;all.push(...(d.results||[]).map(x=>({...x,market})))}}catch{}}
  const seen=new Set();all=all.filter(x=>x.symbol&&!seen.has(x.symbol)&&(seen.add(x.symbol),true)).slice(0,10);
- if(requestId!==globalSearchRequestId)return;box.innerHTML=all.length?all.map(x=>`<button type="button" class="suggestion global-result" data-symbol="${escapeHtml(x.symbol)}" data-name="${escapeHtml(x.name)}" data-market="${x.market}"><strong>${escapeHtml(x.name)}</strong><span>${x.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"} · ${escapeHtml(x.symbol)}</span></button>`).join(""):'<div class="no-result">候補が見つかりません</div>';
+ if(requestId!==globalSearchRequestId||q!==input.value.trim())return;box.innerHTML=all.length?all.map(x=>`<button type="button" class="suggestion global-result" data-symbol="${escapeHtml(x.symbol)}" data-name="${escapeHtml(x.name)}" data-market="${x.market}"><strong>${escapeHtml(x.name)}</strong><span>${x.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"} · ${escapeHtml(x.symbol)}</span></button>`).join(""):'<div class="no-result">候補が見つかりません</div>';
 }
 async function renderExternalDetail(temp){
  detailFromSearch=true;
@@ -275,8 +360,20 @@ async function renderExternalDetail(temp){
 }
 $("#openSearch")?.addEventListener("click",showSearch);
 $("#searchBack")?.addEventListener("click",closeSearch);
-$("#globalSearch")?.addEventListener("input",()=>{clearTimeout(globalSearchTimer);globalSearchTimer=setTimeout(globalSearch,300)});
-$("#globalSuggestions")?.addEventListener("click",async e=>{const b=e.target.closest(".global-result");if(!b)return;const temp={market:b.dataset.market,name:b.dataset.name,symbol:b.dataset.symbol,purchasePriceJPY:0,shares:null,currentPriceJPY:0,updatedAt:null};try{await refreshOne(temp);await renderExternalDetail(temp)}catch{alert("分析データを取得できませんでした。")}});
+$("#globalSearch")?.addEventListener("input",()=>{globalDetailRequestId++;globalSearchRequestId++;$("#globalSuggestions").innerHTML="";clearTimeout(globalSearchTimer);globalSearchTimer=setTimeout(globalSearch,300)});
+$("#globalSuggestions")?.addEventListener("click",async e=>{
+ const b=e.target.closest(".global-result");if(!b)return;
+ const requestId=++globalDetailRequestId;
+ const temp={market:b.dataset.market,name:b.dataset.name,symbol:b.dataset.symbol,purchasePriceJPY:0,shares:null,currentPriceJPY:0,updatedAt:null};
+ try{
+  await refreshOne(temp);
+  // The user may have changed the query, selected another stock or left search.
+  if(requestId!==globalDetailRequestId||$("#searchView").hidden)return;
+  await renderExternalDetail(temp);
+ }catch{
+  if(requestId===globalDetailRequestId&&!$("#searchView").hidden)alert("分析データを取得できませんでした。");
+ }
+});
 
 $("#refreshBtn").addEventListener("click",refreshAll);
 

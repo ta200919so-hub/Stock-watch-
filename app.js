@@ -452,22 +452,31 @@ let globalSearchTimer=null;let globalSearchRequestId=0;let globalDetailRequestId
 function showSearch(){const v=$("#searchView");if(!v)return;$("#homeView").hidden=true;$("#detailView").hidden=true;v.hidden=false;window.scrollTo(0,0);setTimeout(()=>$("#globalSearch")?.focus(),50)}
 function closeSearch(){globalDetailRequestId++;globalSearchRequestId++;clearTimeout(globalSearchTimer);const v=$("#searchView");if(v)v.hidden=true;$("#globalSuggestions").innerHTML="";$("#globalSearch").value="";$("#detailView").hidden=true;$("#homeView").hidden=false;window.scrollTo(0,0)}
 async function globalSearch(){
- const input=$("#globalSearch"),box=$("#globalSuggestions");if(!input||!box)return;const q=input.value.trim();const requestId=++globalSearchRequestId;if(!q){box.innerHTML="";return}
- // Query both markets concurrently: a slow JP endpoint must not block US results.
- // Each request is bounded, and one failed market must not hide the other.
- box.innerHTML='<div class="no-result">検索中…</div>';
- const groups=await Promise.all(["JP","US"].map(async market=>{
+ const input=$("#globalSearch"),box=$("#globalSuggestions");if(!input||!box)return;
+ const q=input.value.trim(),requestId=++globalSearchRequestId;
+ if(!q){box.innerHTML="";return}
+ // Show whichever market answers first; do not wait for the slower API.
+ // Keep already displayed results in arrival order to avoid moving tap targets.
+ const results=[];let settled=0;
+ const isCurrent=()=>requestId===globalSearchRequestId&&q===input.value.trim()&&!$("#searchView").hidden;
+ const renderResults=()=>{
+  if(!isCurrent())return;
+  const seen=new Set();
+  const all=results.filter(x=>x&&typeof x.symbol==="string"&&x.symbol.trim()&&typeof x.name==="string"&&!seen.has(x.symbol)&&(seen.add(x.symbol),true)).slice(0,10);
+  const loading=settled<2;
+  box.innerHTML=(all.length?all.map(x=>`<button type="button" class="suggestion global-result" data-symbol="${escapeHtml(x.symbol)}" data-name="${escapeHtml(x.name)}" data-market="${x.market}"><strong>${escapeHtml(x.name)}</strong><span>${x.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"} · ${escapeHtml(x.symbol)}</span></button>`).join(""):"")+
+   (loading?'<div class="no-result">他の市場も検索中…</div>':all.length?"":'<div class="no-result">候補が見つかりません</div>');
+ };
+ renderResults();
+ await Promise.all(["JP","US"].map(async market=>{
   try{
    const r=await fetchTimeout(`/api/search?q=${encodeURIComponent(q)}&market=${market}`,7000);
-   if(!r.ok)return [];
-   const d=await r.json();
-   return (Array.isArray(d.results)?d.results:[]).map(x=>({...x,market}));
-  }catch{return []}
+   if(r.ok){
+    const d=await r.json();
+    if(isCurrent()&&Array.isArray(d.results))results.push(...d.results.map(x=>({...x,market})));
+   }
+  }catch{}finally{settled++;renderResults()}
  }));
- if(requestId!==globalSearchRequestId||q!==input.value.trim()||$("#searchView").hidden)return;
- const seen=new Set();
- const all=groups.flat().filter(x=>x&&typeof x.symbol==="string"&&x.symbol&&!seen.has(x.symbol)&&(seen.add(x.symbol),true)).slice(0,10);
- if(requestId!==globalSearchRequestId||q!==input.value.trim())return;box.innerHTML=all.length?all.map(x=>`<button type="button" class="suggestion global-result" data-symbol="${escapeHtml(x.symbol)}" data-name="${escapeHtml(x.name)}" data-market="${x.market}"><strong>${escapeHtml(x.name)}</strong><span>${x.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"} · ${escapeHtml(x.symbol)}</span></button>`).join(""):'<div class="no-result">候補が見つかりません</div>';
 }
 async function renderExternalDetail(temp){
  detailFromSearch=true;

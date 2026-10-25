@@ -43,6 +43,28 @@ function chart(prices,currency="JPY"){
  return {chart:{result:[{meta:{currency},timestamp:prices.map((_,i)=>Date.UTC(2026,9,1+i)/1000),
   indicators:{quote:[{close:prices}]}}]}};
 }
+test("unknown quote never creates a fictitious 100% portfolio loss or allocation",()=>{
+ const unknown={...holding,symbol:"NVDA",name:"NVIDIA",currentPriceJPY:0};
+ const x=boot({[KEY]:JSON.stringify([holding,unknown])});
+ assert.equal(x.node("#totalCost").textContent,"¥400");
+ assert.equal(x.node("#totalValue").textContent,"—");
+ assert.equal(x.node("#totalPnl").textContent,"—");
+ assert.equal(x.node("#totalPnlPct").textContent,"—");
+ assert.equal(x.node("#donut").style.background,"var(--panel2)");
+ assert.match(x.node("#legend").innerHTML,/株価未取得/);
+ assert.equal(JSON.parse(x.map.get(KEY)).length,2,"render must not alter stored holdings");
+ const known=boot({[KEY]:JSON.stringify([holding])});
+ assert.equal(known.node("#totalValue").textContent,"¥400");
+ assert.equal(known.node("#totalPnl").textContent,"+¥200");
+ assert.equal(known.node("#totalPnlPct").textContent,"+100.0%");
+});
+test("a wholly unpriced portfolio does not show a -100% loss",()=>{
+ const x=boot({[KEY]:JSON.stringify([{...holding,currentPriceJPY:0}])});
+ assert.equal(x.node("#totalValue").textContent,"—");
+ assert.equal(x.node("#totalPnl").textContent,"—");
+ assert.equal(x.node("#totalPnlPct").textContent,"—");
+});
+
 test("recovers valid backup when primary JSON is corrupt",()=>{
  const x=boot({[KEY]:"{broken",[BACKUP]:JSON.stringify([holding])});
  assert.equal(x.stocks().length,1);

@@ -76,7 +76,7 @@ test("legacy holding with shares but missing buy price renders without crashing 
   const original=JSON.stringify([incomplete]);
   const x=boot({[KEY]:original});
   assert.equal(x.stocks().length,1,"holding must remain visible for manual repair");
-  assert.match(x.node("#list").innerHTML,/Applied Materials/);
+  assert.match(x.node("#list").innerHTML,/アプライド マテリアルズ/);
   assert.match(x.node("#list").innerHTML,/含み損益<\/span><strong[^>]*>—<\/strong>/,
     "missing purchase cost must show unknown P&L instead of crashing or claiming a gain");
   assert.match(x.node("#list").innerHTML,/購入価格<\/span><strong>—<\/strong>/);

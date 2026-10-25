@@ -329,14 +329,14 @@ test("global search clears stale results immediately when input changes",async()
  const x=boot({},false,url=>new Promise(resolve=>pending.push({url,resolve})));
  x.node("#globalSearch").value="old";
  const old=vm.runInContext("globalSearch()",x.context);
- assert.equal(pending.length,1);
+ assert.equal(pending.length,2,"JP and US requests start together");
  x.node("#globalSuggestions").innerHTML='<button>OLD</button>';
  x.node("#globalSearch").value="new";
  x.node("#globalSearch").handlers.input();
  assert.equal(x.node("#globalSuggestions").innerHTML,"");
- pending[0].resolve({ok:true,json:async()=>({results:[{symbol:"OLD",name:"Old Company"}]})});
+ pending.forEach(p=>p.resolve({ok:true,json:async()=>({results:[{symbol:"OLD",name:"Old Company"}]})}));
  await old;
- assert.equal(pending.length,1,"stale JP response must not trigger a second US request");
+ assert.equal(pending.length,2,"stale results must not start additional requests");
  assert.doesNotMatch(x.node("#globalSuggestions").innerHTML,/OLD/);
 });
 test("leaving global search clears query, results and pending response",async()=>{
@@ -348,7 +348,7 @@ test("leaving global search clears query, results and pending response",async()=
  x.node("#searchBack").handlers.click();
  assert.equal(x.node("#globalSearch").value,"");
  assert.equal(x.node("#globalSuggestions").innerHTML,"");
- pending[0]({ok:true,json:async()=>({results:[{symbol:"AMAT",name:"Applied Materials"}]})});
+ pending.forEach(resolve=>resolve({ok:true,json:async()=>({results:[{symbol:"AMAT",name:"Applied Materials"}]})}));
  await request;
  assert.equal(x.node("#globalSuggestions").innerHTML,"");
 });

@@ -398,9 +398,20 @@ function showSearch(){const v=$("#searchView");if(!v)return;$("#homeView").hidde
 function closeSearch(){globalDetailRequestId++;globalSearchRequestId++;clearTimeout(globalSearchTimer);const v=$("#searchView");if(v)v.hidden=true;$("#globalSuggestions").innerHTML="";$("#globalSearch").value="";$("#detailView").hidden=true;$("#homeView").hidden=false;window.scrollTo(0,0)}
 async function globalSearch(){
  const input=$("#globalSearch"),box=$("#globalSuggestions");if(!input||!box)return;const q=input.value.trim();const requestId=++globalSearchRequestId;if(!q){box.innerHTML="";return}
- let all=[];
- for(const market of ["JP","US"]){try{const r=await fetch(`/api/search?q=${encodeURIComponent(q)}&market=${market}`);if(requestId!==globalSearchRequestId||q!==input.value.trim())return;if(r.ok){const d=await r.json();if(requestId!==globalSearchRequestId||q!==input.value.trim())return;all.push(...(d.results||[]).map(x=>({...x,market})))}}catch{}}
- const seen=new Set();all=all.filter(x=>x.symbol&&!seen.has(x.symbol)&&(seen.add(x.symbol),true)).slice(0,10);
+ // Query both markets concurrently: a slow JP endpoint must not block US results.
+ // Each request is bounded, and one failed market must not hide the other.
+ box.innerHTML='<div class="no-result">検索中…</div>';
+ const groups=await Promise.all(["JP","US"].map(async market=>{
+  try{
+   const r=await fetchTimeout(`/api/search?q=${encodeURIComponent(q)}&market=${market}`,7000);
+   if(!r.ok)return [];
+   const d=await r.json();
+   return (Array.isArray(d.results)?d.results:[]).map(x=>({...x,market}));
+  }catch{return []}
+ }));
+ if(requestId!==globalSearchRequestId||q!==input.value.trim()||$("#searchView").hidden)return;
+ const seen=new Set();
+ const all=groups.flat().filter(x=>x&&typeof x.symbol==="string"&&x.symbol&&!seen.has(x.symbol)&&(seen.add(x.symbol),true)).slice(0,10);
  if(requestId!==globalSearchRequestId||q!==input.value.trim())return;box.innerHTML=all.length?all.map(x=>`<button type="button" class="suggestion global-result" data-symbol="${escapeHtml(x.symbol)}" data-name="${escapeHtml(x.name)}" data-market="${x.market}"><strong>${escapeHtml(x.name)}</strong><span>${x.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"} · ${escapeHtml(x.symbol)}</span></button>`).join(""):'<div class="no-result">候補が見つかりません</div>';
 }
 async function renderExternalDetail(temp){

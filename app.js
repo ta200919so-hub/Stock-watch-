@@ -236,9 +236,16 @@ function renderDetail(i){
 function render(){
   const shown=stocks.filter(s=>filter==="ALL"||s.market===filter);
   $("#list").innerHTML=shown.length?shown.map(s=>{
-    const i=stocks.indexOf(s),p=pnlPct(s),cls=p===null?"":p>=0?"up":"down",cost=s.shares?s.purchasePriceJPY*s.shares:null,value=s.shares&&s.currentPriceJPY?s.currentPriceJPY*s.shares:null,pl=cost!==null&&value!==null?value-cost:null,dec=decision(s),c=autoComment(s);
+    const i=stocks.indexOf(s),p=pnlPct(s),cls=p===null?"":p>=0?"up":"down";
+    // Legacy or partially recovered holdings can have shares but no valid buy price.
+    // Never format a null percentage or invent a profit for those records.
+    const hasCost=Number.isFinite(s.purchasePriceJPY)&&s.purchasePriceJPY>0&&Number.isFinite(s.shares)&&s.shares>0;
+    const hasPrice=Number.isFinite(s.currentPriceJPY)&&s.currentPriceJPY>0;
+    const cost=hasCost?s.purchasePriceJPY*s.shares:null;
+    const value=hasCost&&hasPrice?s.currentPriceJPY*s.shares:null;
+    const pl=cost!==null&&value!==null?value-cost:null,dec=decision(s),c=autoComment(s);
     return `<article class="card compact-card" data-detail="${i}"><div class="top"><div><div class="name">${escapeHtml(displayName(s))}</div><div class="market">${s.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"}</div></div><div class="price">${s.currentPriceJPY?yen(s.currentPriceJPY):"—"}<div class="price-label">現在株価</div></div></div>
-    ${s.shares?`<div class="holding-grid compact-holding"><div><span>購入価格</span><strong>${yen(s.purchasePriceJPY)}</strong></div><div><span>保有株数</span><strong>${num(s.shares)}株</strong></div></div><div class="pnl-row"><span>含み損益</span><strong class="${cls}">${pl===null?"—":`${pl>=0?"+":""}${yen(pl)}　${p>=0?"+":""}${p.toFixed(1)}%`}</strong></div>`:""}
+    ${s.shares?`<div class="holding-grid compact-holding"><div><span>購入価格</span><strong>${hasCost?yen(s.purchasePriceJPY):"—"}</strong></div><div><span>保有株数</span><strong>${num(s.shares)}株</strong></div></div><div class="pnl-row"><span>含み損益</span><strong class="${cls}">${pl===null||p===null?"—":`${pl>=0?"+":""}${yen(pl)}　${p>=0?"+":""}${p.toFixed(1)}%`}</strong></div>`:""}
     <div class="compact-decision"><span class="${dec.kind}">${escapeHtml(dec.label)}</span></div>
     <div class="bottom"><div class="small">${s.updatedAt?`更新 ${new Date(s.updatedAt).toLocaleString("ja-JP")}`:""}</div><div class="card-actions"><button class="edit" data-edit="${i}">編集</button><button class="delete" data-del="${i}">削除</button><span class="detail-arrow">分析を見る ›</span></div></div></article>`;
   }).join(""):`<div class="empty">保有銘柄を追加してポートフォリオ管理を始めよう。</div>`;

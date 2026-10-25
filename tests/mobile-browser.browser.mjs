@@ -92,6 +92,33 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         await page.screenshot({path:resolve(screenshots,"unknown-price-390.png")});
       }finally{await context.close()}
     });
+    await t.test("legacy missing purchase price remains editable without losing saved holdings",async()=>{
+      const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:"block"});
+      const legacy={...sample[0],purchasePriceJPY:0};
+      const original=JSON.stringify([legacy]);
+      try{
+        const page=await context.newPage();
+        await page.addInitScript(data=>localStorage.setItem("stock-watch-ai-v1",data),original);
+        await page.route("**/api/quote?*",route=>route.fulfill({status:503,body:"offline quote"}));
+        await page.goto(base);
+        const card=page.locator("#list .card").first();
+        assert.equal(await page.locator("#list .card").count(),1,"legacy holding must remain accessible");
+        assert.match(await card.innerText(),/購入価格\s*—/);
+        assert.match(await card.innerText(),/含み損益\s*—/);
+        assert.equal(await page.evaluate(()=>localStorage.getItem("stock-watch-ai-v1")),original,
+          "display must not rewrite the original record");
+        assert.equal(await page.evaluate(()=>localStorage.getItem("stock-watch-ai-backup-v1")),null,
+          "display must not rotate backups");
+        await page.screenshot({path:resolve(screenshots,"legacy-missing-cost-390.png")});
+        await page.locator('[data-edit="0"]').click();
+        await page.locator("#editPurchasePrice").fill("100");
+        await page.locator('#editForm button[type="submit"]').click();
+        assert.match(await page.locator("#list .card").first().innerText(),/含み損益\s*\+¥200/);
+        const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem("stock-watch-ai-v1"))[0]);
+        assert.equal(saved.purchasePriceJPY,100);
+        assert.equal(saved.shares,2);
+      }finally{await context.close()}
+    });
     await t.test("chart ticks and Japanese stock search render",async()=>{
       const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
       try{

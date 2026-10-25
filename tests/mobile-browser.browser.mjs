@@ -73,6 +73,25 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         }finally{await context.close()}
       });
     }
+    await t.test("unpriced holding never appears as a 100% loss on iPhone-sized screen",async()=>{
+      const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:"block"});
+      try{
+        const page=await context.newPage();
+        const holdings=[sample[0],{...sample[1],currentPriceJPY:0}];
+        await page.addInitScript(data=>localStorage.setItem("stock-watch-ai-v1",JSON.stringify(data)),holdings);
+        await page.route("**/api/quote?*",route=>route.fulfill({status:503,body:"unavailable"}));
+        await page.goto(base);
+        assert.equal(await page.locator("#totalValue").innerText(),"—");
+        assert.equal(await page.locator("#totalPnl").innerText(),"—");
+        assert.equal(await page.locator("#totalPnlPct").innerText(),"—");
+        assert.match(await page.locator("#legend").innerText(),/株価未取得/);
+        assert.equal(await page.locator("#donutTotal").innerText(),"—");
+        assert.equal(await page.locator("#holdingCount").innerText(),"2銘柄");
+        assert.doesNotMatch(await page.evaluate(()=>focusScore(stocks[0]).reasons.join("・")),/保有比率/,"missing quotes must not imply 100% concentration");
+        assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem("stock-watch-ai-v1")).length),2);
+        await page.screenshot({path:resolve(screenshots,"unknown-price-390.png")});
+      }finally{await context.close()}
+    });
     await t.test("chart ticks and Japanese stock search render",async()=>{
       const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
       try{

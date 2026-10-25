@@ -122,16 +122,23 @@ function stockScore(s){
   if(Number.isFinite(s.fundamentals?.trailingPE)&&s.fundamentals.trailingPE>60)score-=5;
   return Math.max(0,Math.min(100,Math.round(score)));
 }
+// Only compute concentration when every held position has a valid quote.
+function portfolioWeight(s){
+  const held=stocks.filter(x=>x.shares>0&&x.purchasePriceJPY>0);
+  if(held.some(x=>!Number.isFinite(x.currentPriceJPY)||x.currentPriceJPY<=0))return null;
+  const total=held.reduce((a,x)=>a+x.shares*x.currentPriceJPY,0);
+  return total>0&&s.shares>0&&s.purchasePriceJPY>0?s.shares*s.currentPriceJPY/total:null;
+}
 function decision(s){
   const base=stockScore(s);if(base===null)return {label:"データ待ち",kind:"neutral",score:null,reasons:["株価と保有情報を更新してください。"]};
   let score=base,reasons=[];const f=s.fundamentals||{},news=s.news||[];
-  const total=stocks.reduce((a,x)=>a+(x.shares||0)*(x.currentPriceJPY||0),0),value=(s.shares||0)*(s.currentPriceJPY||0),weight=total?value/total:0;
+  const weight=portfolioWeight(s);
   const pos=news.filter(n=>n.impact==="positive").length,neg=news.filter(n=>n.impact==="negative").length;
   if(pos>neg){score+=5;reasons.push("直近ニュースは好材料が優勢");}else if(neg>pos){score-=7;reasons.push("直近ニュースは悪材料が優勢");}
   if(Number.isFinite(f.revenueGrowth)){if(f.revenueGrowth>0.1)reasons.push("売上成長率が10%超");else if(f.revenueGrowth<0)reasons.push("売上成長率がマイナス");}
   if(Number.isFinite(f.profitMargin)&&f.profitMargin>0.15)reasons.push("利益率が比較的高い");
   if(Number.isFinite(f.trailingPE)&&f.trailingPE>60){score-=4;reasons.push("PERが高水準");}
-  if(weight>0.35){score-=10;reasons.push("ポートフォリオ比率が35%超");}
+  if(weight!==null&&weight>0.35){score-=10;reasons.push("ポートフォリオ比率が35%超");}
   score=Math.max(0,Math.min(100,Math.round(score)));
   const label=score>=68?"買い増し検討":score<45?"注意":"様子見",kind=score>=68?"positive":score<45?"negative":"neutral";
   if(!reasons.length)reasons.push("価格・企業指標を総合すると中立圏");
@@ -157,12 +164,12 @@ function autoComment(s){
 }
 function focusScore(s){
   let score=0,reasons=[];const d=Number.isFinite(s.dayChangePct)?s.dayChangePct:0,dec=decision(s),news=s.news||[];
-  const total=stocks.reduce((a,x)=>a+(x.shares||0)*(x.currentPriceJPY||0),0),value=(s.shares||0)*(s.currentPriceJPY||0),weight=total?value/total:0;
+  const weight=portfolioWeight(s);
   if(Math.abs(d)>=3){score+=25+Math.min(15,Math.abs(d)*2);reasons.push(`前日比 ${d>=0?"+":""}${d.toFixed(1)}% と値動き大`);}
   const neg=news.filter(n=>n.impact==="negative").length,pos=news.filter(n=>n.impact==="positive").length;
   if(neg){score+=20+neg*5;reasons.push("悪材料ニュースを確認");}else if(pos){score+=10+pos*3;reasons.push("好材料ニュースあり");}
   if(dec.kind==="negative"){score+=20;reasons.push("総合判定が注意");}
-  if(weight>=0.25){score+=Math.round(weight*30);reasons.push(`保有比率 ${(weight*100).toFixed(0)}%`);}
+  if(weight!==null&&weight>=0.25){score+=Math.round(weight*30);reasons.push(`保有比率 ${(weight*100).toFixed(0)}%`);}
   const p=pnlPct(s);if(p!==null&&Math.abs(p)>=20){score+=10;reasons.push(`買値比 ${p>=0?"+":""}${p.toFixed(0)}%`);}
   if(!reasons.length)reasons.push("大きな警戒材料は少なめ");
   return {score,reasons:reasons.slice(0,2),decision:dec};
@@ -175,8 +182,10 @@ function renderTodayFocus(){
 function portfolio(){
   const held=stocks.filter(s=>s.shares>0&&s.purchasePriceJPY>0);
   const cost=held.reduce((a,s)=>a+s.purchasePriceJPY*s.shares,0);
-  const value=held.reduce((a,s)=>a+(s.currentPriceJPY||0)*s.shares,0);
-  return {cost,value,pnl:value-cost,pct:cost?((value/cost)-1)*100:null};
+  // Unknown prices must not be treated as zero: that would invent a loss.
+  const hasUnknownPrice=held.some(s=>!Number.isFinite(s.currentPriceJPY)||s.currentPriceJPY<=0);
+  const value=hasUnknownPrice?null:held.reduce((a,s)=>a+s.currentPriceJPY*s.shares,0);
+  return {cost,value,pnl:value===null?null:value-cost,pct:value===null||!cost?null:((value/cost)-1)*100};
 }
 function renderDetail(i){
   detailFromSearch=false;
@@ -233,7 +242,7 @@ function render(){
     <div class="compact-decision"><span class="${dec.kind}">${escapeHtml(dec.label)}</span></div>
     <div class="bottom"><div class="small">${s.updatedAt?`更新 ${new Date(s.updatedAt).toLocaleString("ja-JP")}`:""}</div><div class="card-actions"><button class="edit" data-edit="${i}">編集</button><button class="delete" data-del="${i}">削除</button><span class="detail-arrow">分析を見る ›</span></div></div></article>`;
   }).join(""):`<div class="empty">保有銘柄を追加してポートフォリオ管理を始めよう。</div>`;
-  const t=portfolio();$("#totalCost").textContent=yen(t.cost);$("#totalValue").textContent=yen(t.value);$("#totalPnl").textContent=(t.pnl>=0?"+":"")+yen(t.pnl);$("#totalPnl").className=t.pnl>=0?"up":"down";$("#totalPnlPct").textContent=t.pct===null?"—":`${t.pct>=0?"+":""}${t.pct.toFixed(1)}%`;$("#totalPnlPct").className=t.pct===null?"":t.pct>=0?"up":"down";renderTodayFocus();renderAllocation();renderRecommendations();
+  const t=portfolio();$("#totalCost").textContent=yen(t.cost);$("#totalValue").textContent=t.value===null?"—":yen(t.value);$("#totalPnl").textContent=t.pnl===null?"—":(t.pnl>=0?"+":"")+yen(t.pnl);$("#totalPnl").className=t.pnl===null?"":t.pnl>=0?"up":"down";$("#totalPnlPct").textContent=t.pct===null?"—":`${t.pct>=0?"+":""}${t.pct.toFixed(1)}%`;$("#totalPnlPct").className=t.pct===null?"":t.pct>=0?"up":"down";renderTodayFocus();renderAllocation();renderRecommendations();
 }
 function renderRecommendations(){
   const box=$("#recommendations"); if(!box)return;
@@ -249,9 +258,18 @@ function renderRecommendations(){
   box.innerHTML=candidates.length?candidates.map(x=>`<div class="recommend"><div><strong>${escapeHtml(x.name)}</strong><span>${escapeHtml(x.sector)}</span></div><b>${x.fit}点</b><p>${escapeHtml(x.why)}</p><small>候補スコアはポートフォリオ分散を中心に算出。買い推奨ではありません。</small></div>`).join(""):'<div class="muted">候補を計算するには保有銘柄を登録してください。</div>';
 }
 function renderAllocation(){
+  const unpriced=stocks.filter(s=>s.shares>0&&s.purchasePriceJPY>0&&(!Number.isFinite(s.currentPriceJPY)||s.currentPriceJPY<=0));
   const held=stocks.filter(s=>s.shares>0&&s.currentPriceJPY>0).map(s=>({...s,value:s.shares*s.currentPriceJPY})).sort((a,b)=>b.value-a.value);
   const total=held.reduce((a,s)=>a+s.value,0);
   $("#donutTotal").textContent=yen(total); $("#holdingCount").textContent=held.length?held.length+"銘柄":"";
+  if(unpriced.length){
+    $("#donutTotal").textContent="—";
+    $("#holdingCount").textContent=stocks.filter(s=>s.shares>0&&s.purchasePriceJPY>0).length+"銘柄";
+    $("#donut").style.background="var(--panel2)";
+    $("#legend").innerHTML='<span class="muted">株価未取得の銘柄があるため、構成比は表示できません</span>';
+    $("#concentration").textContent="株価を更新すると全銘柄の構成比を表示します。";
+    return;
+  }
   if(!total){$("#donut").style.background="var(--panel2)";$("#legend").innerHTML='<span class="muted">現在株価を取得すると表示されます</span>';$("#concentration").textContent="保有データが揃うと構成比を分析します。";return}
   const colors=["#7c8cff","#4ade80","#fbbf24","#fb7185","#38bdf8","#c084fc","#fb923c","#94a3b8"];
   let at=0,stops=[];held.forEach((s,i)=>{const p=s.value/total*100;stops.push(`${colors[i%colors.length]} ${at}% ${at+p}%`);at+=p});

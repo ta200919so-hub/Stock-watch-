@@ -211,7 +211,8 @@ function renderDetail(i){
   $("#homeView").hidden=true;$("#detailView").hidden=false;window.scrollTo(0,0);
   // Existing holdings can contain pre-upgrade fundamentals in localStorage.
   // Refresh the financial panel without touching the saved portfolio or its backup.
-  if(Number.isFinite(f.quarterRevenue)&&!Number.isFinite(f.quarterRevenueJPY)){
+  if((Number.isFinite(f.quarterRevenue)&&!Number.isFinite(f.quarterRevenueJPY))||
+     (Number.isFinite(f.quarterOperatingIncome)&&!Number.isFinite(f.quarterOperatingIncomeJPY))){
     const symbol=s.symbol,financialSection=$("#financialDetailSection");
     fetchTimeout("/api/fundamentals?symbol="+encodeURIComponent(symbol)+"&market="+encodeURIComponent(s.market))
       .then(r=>r.ok?r.json():null).then(next=>{

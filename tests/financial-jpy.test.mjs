@@ -4,7 +4,7 @@ import {readFileSync} from "node:fs";
 import vm from "node:vm";
 
 const source=readFileSync(new URL("../api/fundamentals.js",import.meta.url),"utf8");
-function run({currency="EUR",fx=180,market="US",currencyMissing=false,symbol="ASML",fallbackFx=null}={}){
+function run({currency="EUR",fx=180,market="US",currencyMissing=false,symbol="ASML",fallbackFx=null,targetPrice=null}={}){
  const requests=[];
  const series=["quarterlyTotalRevenue","quarterlyOperatingIncome"].map((type,i)=>({
   meta:{type:[type]},
@@ -13,7 +13,7 @@ function run({currency="EUR",fx=180,market="US",currencyMissing=false,symbol="AS
  const fetch=async url=>{
   requests.push(url);
   if(url.includes("fundamentals-timeseries"))return {ok:true,json:async()=>({timeseries:{result:series}})};
-  if(url.includes("quoteSummary"))return {ok:false,status:403};
+  if(url.includes("quoteSummary"))return targetPrice===null?{ok:false,status:403}:{ok:true,json:async()=>({quoteSummary:{result:[{financialData:{targetMeanPrice:{raw:targetPrice}}}]}})};
   if(url.includes("api.frankfurter.dev"))return {ok:fallbackFx!==null,status:503,json:async()=>({date:"2026-10-23",rates:{JPY:fallbackFx}})};
   if(url.includes("finance/chart/")){
    const isFx=url.includes("EURJPY%3DX")||url.includes("EURJPY=X")||url.includes("JPY%3DX")||url.includes("JPY=X");
@@ -67,4 +67,32 @@ test("ASML converts with ECB fallback when Yahoo FX is unavailable",async()=>{
  assert.equal(body.quarterOperatingIncomeJPY,5173000000*182.5);
  assert.equal(body.quarterFxDate,"2026-10-23");
  assert.ok(requests.some(x=>x.includes("api.frankfurter.dev")));
+});
+
+test("US analyst target is converted to yen with a verified positive USD/JPY rate",async()=>{
+ const {body}=await run({targetPrice:200,fx:180});
+ assert.equal(body.targetMeanPrice,200);
+ assert.equal(body.targetMeanPriceJPY,36000);
+});
+test("missing USD/JPY must not display an invented zero-yen analyst target",async()=>{
+ const {body}=await run({targetPrice:200,fx:null});
+ assert.equal(body.targetMeanPrice,200);
+ assert.equal(body.targetMeanPriceJPY,null);
+});
+test("negative or non-finite USD/JPY cannot produce a yen analyst target",async()=>{
+ for(const fx of [-10,0,Infinity,NaN]){
+  const {body}=await run({targetPrice:200,fx});
+  assert.equal(body.targetMeanPriceJPY,null,String(fx));
+ }
+});
+test("Japanese analyst target is already yen and needs no FX request",async()=>{
+ const {body,requests}=await run({market:"JP",currency:"JPY",targetPrice:1200,fx:null});
+ assert.equal(body.targetMeanPriceJPY,1200);
+ assert.ok(!requests.some(x=>x.includes("JPY=X")||x.includes("JPY%3DX")));
+});
+test("zero or negative analyst targets are not reported as valid yen prices",async()=>{
+ for(const targetPrice of [0,-5]){
+  const {body}=await run({market:"JP",currency:"JPY",targetPrice});
+  assert.equal(body.targetMeanPriceJPY,null,String(targetPrice));
+ }
 });

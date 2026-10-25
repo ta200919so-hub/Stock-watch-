@@ -87,7 +87,7 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         assert.match(await page.locator("#legend").innerText(),/株価未取得/);
         assert.equal(await page.locator("#donutTotal").innerText(),"—");
         assert.equal(await page.locator("#holdingCount").innerText(),"2銘柄");
-        assert.doesNotMatch(await page.locator("#todayFocus").innerText(),/保有比率/,"missing quotes must not imply 100% concentration");
+        assert.doesNotMatch(await page.evaluate(()=>focusScore(stocks[0]).reasons.join("・")),/保有比率/,"missing quotes must not imply 100% concentration");
         assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem("stock-watch-ai-v1")).length),2);
         await page.screenshot({path:resolve(screenshots,"unknown-price-390.png")});
       }finally{await context.close()}

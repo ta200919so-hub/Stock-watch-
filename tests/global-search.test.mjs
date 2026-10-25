@@ -71,3 +71,40 @@ test("deduplicates market matches and escapes untrusted result text",async()=>{
  assert.match(h.box.innerHTML,/&lt;script&gt;/);
  assert.doesNotMatch(h.box.innerHTML,/<script>/);
 });
+
+test("fast US matches are tappable before the slower JP market finishes",async()=>{
+ const pending=[];
+ const h=harness((url,ms)=>new Promise(resolve=>pending.push({url,ms,resolve})));
+ h.input.value="AMAT";
+ const run=h.search();
+ assert.equal(pending.length,2);
+ pending[1].resolve(response([{symbol:"AMAT",name:"Applied Materials"}]));
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.match(h.box.innerHTML,/data-symbol="AMAT"/);
+ assert.match(h.box.innerHTML,/他の市場も検索中/);
+ pending[0].resolve(response([{symbol:"7203.T",name:"トヨタ"}]));
+ await run;
+ assert.match(h.box.innerHTML,/data-symbol="AMAT"/);
+ assert.match(h.box.innerHTML,/data-symbol="7203.T"/);
+ assert.ok(h.box.innerHTML.indexOf("AMAT")<h.box.innerHTML.indexOf("7203.T"),"first result keeps its position");
+ assert.doesNotMatch(h.box.innerHTML,/検索中/);
+});
+test("late partial responses from an older query never replace new results",async()=>{
+ const pending=[];
+ const h=harness(url=>new Promise(resolve=>pending.push({url,resolve})));
+ h.input.value="old";
+ const old=h.search();
+ pending[1].resolve(response([{symbol:"OLD",name:"Old Company"}]));
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.match(h.box.innerHTML,/OLD/);
+ h.input.value="new";
+ const newer=h.search();
+ assert.doesNotMatch(h.box.innerHTML,/OLD/);
+ pending[2].resolve(response([{symbol:"NEW",name:"New Company"}]));
+ pending[3].resolve(response([]));
+ await newer;
+ pending[0].resolve(response([{symbol:"STALE",name:"Stale Company"}]));
+ await old;
+ assert.match(h.box.innerHTML,/NEW/);
+ assert.doesNotMatch(h.box.innerHTML,/OLD|STALE/);
+});

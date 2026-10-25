@@ -119,6 +119,39 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         assert.equal(saved.shares,2);
       }finally{await context.close()}
     });
+    await t.test("bounded concurrent refresh saves all quotes without dropping holdings",async()=>{
+      const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:"block"});
+      let releaseQuotes,notifyThree;
+      const gate=new Promise(resolve=>{releaseQuotes=resolve});
+      const threeStarted=new Promise(resolve=>{notifyThree=resolve});
+      let active=0,maxActive=0;
+      const original=sample.slice(0,4);
+      try{
+        const page=await context.newPage();
+        await page.addInitScript(data=>localStorage.setItem("stock-watch-ai-v1",JSON.stringify(data)),original);
+        await page.route("**/api/quote?*",async route=>{
+          active++;maxActive=Math.max(maxActive,active);
+          if(active===3)notifyThree();
+          try{
+            await gate;
+            await route.fulfill({json:{priceJPY:275,dayChangePct:1}});
+          }finally{active--}
+        });
+        await page.goto(base);
+        await Promise.race([threeStarted,new Promise((_,reject)=>
+          setTimeout(()=>reject(new Error("refresh did not start three concurrent quotes")),7000))]);
+        assert.equal(maxActive,3,"refresh must not exceed three concurrent quote requests");
+        releaseQuotes();
+        await page.waitForFunction(()=>JSON.parse(localStorage.getItem("stock-watch-ai-v1"))
+          .every(x=>x.currentPriceJPY===275),{timeout:15000});
+        const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem("stock-watch-ai-v1")));
+        assert.equal(saved.length,4);
+        assert.deepEqual(saved.map(x=>x.symbol),original.map(x=>x.symbol),
+          "concurrent refresh must preserve all holdings and their order");
+        assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem("stock-watch-ai-backup-v1")).length),4,
+          "the previous valid portfolio must remain recoverable");
+      }finally{releaseQuotes();await context.close()}
+    });
     await t.test("chart ticks and Japanese stock search render",async()=>{
       const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
       try{
@@ -363,8 +396,11 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         await page.evaluate(data=>localStorage.setItem("stock-watch-ai-v1",JSON.stringify(data)),[sample[0]]);
         await page.reload();
         await page.evaluate(async()=>navigator.serviceWorker.ready);
-        // A ready registration alone does not guarantee the current page is controlled.
-        await page.waitForFunction(()=>navigator.serviceWorker.controller!==null,{timeout:10000});
+        // The first navigation may race SW installation. Verify an actual
+        // controller before switching offline, reloading once if necessary.
+        if(!await page.evaluate(()=>navigator.serviceWorker.controller!==null))
+          await page.reload({waitUntil:"load"});
+        await page.waitForFunction(()=>navigator.serviceWorker.controller!==null,null,{timeout:10000});
         await context.setOffline(true);
         await page.reload({waitUntil:"load"});
         assert.equal(await page.locator("#list .card").count(),1,

@@ -103,8 +103,8 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         await page.goto(base);
         const card=page.locator("#list .card").first();
         assert.equal(await page.locator("#list .card").count(),1,"legacy holding must remain accessible");
-        assert.match(await card.innerText(),/購入価格\\s*—/);
-        assert.match(await card.innerText(),/含み損益\\s*—/);
+        assert.match(await card.innerText(),/購入価格\s*—/);
+        assert.match(await card.innerText(),/含み損益\s*—/);
         assert.equal(await page.evaluate(()=>localStorage.getItem("stock-watch-ai-v1")),original,
           "display must not rewrite the original record");
         assert.equal(await page.evaluate(()=>localStorage.getItem("stock-watch-ai-backup-v1")),null,
@@ -113,7 +113,7 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         await page.locator('[data-edit="0"]').click();
         await page.locator("#editPurchasePrice").fill("100");
         await page.locator('#editForm button[type="submit"]').click();
-        assert.match(await page.locator("#list .card").first().innerText(),/含み損益\\s*\\+¥200/);
+        assert.match(await page.locator("#list .card").first().innerText(),/含み損益\s*\+¥200/);
         const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem("stock-watch-ai-v1"))[0]);
         assert.equal(saved.purchasePriceJPY,100);
         assert.equal(saved.shares,2);

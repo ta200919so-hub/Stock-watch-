@@ -230,8 +230,9 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
       const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
       try{
         const page=await context.newPage();
-        await page.addInitScript(data=>localStorage.setItem("stock-watch-ai-v1",JSON.stringify(data)),[sample[0]]);
         await page.goto(base);
+        await page.evaluate(data=>localStorage.setItem("stock-watch-ai-v1",JSON.stringify(data)),[sample[0]]);
+        await page.reload();
         await page.evaluate(async()=>navigator.serviceWorker.ready);
         // A ready registration alone does not guarantee the current page is controlled.
         await page.waitForFunction(()=>navigator.serviceWorker.controller!==null,{timeout:10000});

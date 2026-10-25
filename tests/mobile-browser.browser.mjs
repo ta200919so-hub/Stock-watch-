@@ -73,6 +73,22 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         }finally{await context.close()}
       });
     }
+    await t.test("unpriced holding never appears as a 100% loss on iPhone-sized screen",async()=>{
+      const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:"block"});
+      try{
+        const page=await context.newPage();
+        const holdings=[sample[0],{...sample[1],currentPriceJPY:0}];
+        await page.addInitScript(data=>localStorage.setItem("stock-watch-ai-v1",JSON.stringify(data)),holdings);
+        await page.route("**/api/quote?*",route=>route.fulfill({status:503,body:"unavailable"}));
+        await page.goto(base);
+        assert.equal(await page.locator("#totalValue").innerText(),"—");
+        assert.equal(await page.locator("#totalPnl").innerText(),"—");
+        assert.equal(await page.locator("#totalPnlPct").innerText(),"—");
+        assert.match(await page.locator("#legend").innerText(),/株価未取得/);
+        assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem("stock-watch-ai-v1")).length),2);
+        await page.screenshot({path:resolve(screenshots,"unknown-price-390.png")});
+      }finally{await context.close()}
+    });
     await t.test("chart ticks and Japanese stock search render",async()=>{
       const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
       try{
@@ -235,9 +251,10 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         const page=await context.newPage();
         await page.goto(base);
         await page.evaluate(data=>localStorage.setItem("stock-watch-ai-v1",JSON.stringify(data)),[sample[0]]);
-        await page.reload();
+        // Wait for activation before navigation; otherwise the reload can race
+        // the initial installation and leave this page uncontrolled.
         await page.evaluate(async()=>navigator.serviceWorker.ready);
-        // A ready registration alone does not guarantee the current page is controlled.
+        await page.reload();
         await page.waitForFunction(()=>navigator.serviceWorker.controller!==null,{timeout:10000});
         await context.setOffline(true);
         await page.reload({waitUntil:"load"});

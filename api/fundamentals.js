@@ -3,7 +3,7 @@ const n=v=>{if(v==null||v==="")return null;const x=Number(v?.raw??v);return Numb
 async function chart(symbol,range="1y"){const j=await getJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${range}`);return j?.chart?.result?.[0]||null}
 async function timeseries(symbol,types){const now=Math.floor(Date.now()/1000),start=now-86400*900;const j=await getJson(`https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(symbol)}?symbol=${encodeURIComponent(symbol)}&type=${types.join(",")}&period1=${start}&period2=${now}`);return j?.timeseries?.result||[]}
 const latest=(rows,type)=>{const r=rows.find(x=>x.meta?.type?.[0]===type||x[type]);const a=r?.[type];return Array.isArray(a)&&a.length?n(a[a.length-1]?.reportedValue):null};
-async function fxJPY(){try{const rate=n((await chart("JPY=X","5d"))?.meta?.regularMarketPrice);return rate!==null&&rate>0?rate:null}catch{return null}}
+async function fxJPY(){try{const meta=(await chart("JPY=X","5d"))?.meta;const rate=n(meta?.regularMarketPrice);return meta?.currency==="JPY"&&rate!==null&&rate>0?rate:null}catch{return null}}
 const currencyOf=(entries)=>{for(const x of entries){const c=x?.currencyCode||x?.currency||x?.reportedValue?.currencyCode;if(typeof c==="string"&&/^[A-Z]{3}$/.test(c))return c}return null};
 // ASML reports in EUR even when its NASDAQ-listed shares trade in USD.
 // Yahoo's fundamentals timeseries can omit the reporting-currency metadata.
@@ -16,7 +16,7 @@ async function currencyToJPY(currency){
  try{
   const c=await chart(currency==="USD"?"JPY=X":currency+"JPY=X","5d");
   const rate=n(c?.meta?.regularMarketPrice),time=n(c?.meta?.regularMarketTime);
-  if(rate!==null&&rate>0)return {rate,date:time?new Date(time*1000).toISOString().slice(0,10):null};
+  if(c?.meta?.currency==="JPY"&&rate!==null&&rate>0)return {rate,date:time?new Date(time*1000).toISOString().slice(0,10):null};
  }catch{}
  try{
   const data=await getJson("https://api.frankfurter.dev/v1/latest?base="+encodeURIComponent(currency)+"&symbols=JPY");

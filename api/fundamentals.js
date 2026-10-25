@@ -5,15 +5,25 @@ async function timeseries(symbol,types){const now=Math.floor(Date.now()/1000),st
 const latest=(rows,type)=>{const r=rows.find(x=>x.meta?.type?.[0]===type||x[type]);const a=r?.[type];return Array.isArray(a)&&a.length?n(a[a.length-1]?.reportedValue):null};
 async function fxJPY(){try{return n((await chart("JPY=X","5d"))?.meta?.regularMarketPrice)||null}catch{return null}}
 const currencyOf=(entries)=>{for(const x of entries){const c=x?.currencyCode||x?.currency||x?.reportedValue?.currencyCode;if(typeof c==="string"&&/^[A-Z]{3}$/.test(c))return c}return null};
+// ASML reports in EUR even when its NASDAQ-listed shares trade in USD.
+// Yahoo's fundamentals timeseries can omit the reporting-currency metadata.
+const knownReportingCurrencies={"ASML":"EUR","ASML.AS":"EUR"};
+const reportingCurrencyFor=(symbol,market)=>knownReportingCurrencies[symbol.toUpperCase()]||(market==="JP"?"JPY":null);
 async function currencyToJPY(currency){
  if(currency==="JPY")return {rate:1,date:null};
  if(!currency||!/^[A-Z]{3}$/.test(currency))return null;
+ // Primary quote: Yahoo Finance; independent free ECB-based rate fallback.
  try{
   const c=await chart(currency==="USD"?"JPY=X":currency+"JPY=X","5d");
   const rate=n(c?.meta?.regularMarketPrice),time=n(c?.meta?.regularMarketTime);
-  if(rate===null||rate<=0)return null;
-  return {rate,date:time?new Date(time*1000).toISOString().slice(0,10):null};
- }catch{return null}
+  if(rate!==null&&rate>0)return {rate,date:time?new Date(time*1000).toISOString().slice(0,10):null};
+ }catch{}
+ try{
+  const data=await getJson("https://api.frankfurter.dev/v1/latest?base="+encodeURIComponent(currency)+"&symbols=JPY");
+  const rate=n(data?.rates?.JPY);
+  if(rate!==null&&rate>0)return {rate,date:/^\\d{4}-\\d{2}-\\d{2}$/.test(data?.date||"")?data.date:null};
+ }catch{}
+ return null;
 }
 export default async function handler(req,res){
  const symbol=String(req.query.symbol||""),market=String(req.query.market||"JP");if(!symbol)return res.status(400).json({error:"symbol_required"});
@@ -29,7 +39,7 @@ export default async function handler(req,res){
    // Never silently treat EUR/USD reports as JPY or use a fabricated FX rate.
    if(qrCurrency&&qoCurrency&&qrCurrency!==qoCurrency){out.quarterFinancialCurrency=null}
    else{
-    const reportingCurrency=qrCurrency||qoCurrency||(market==="JP"?"JPY":null);
+    const reportingCurrency=qrCurrency||qoCurrency||reportingCurrencyFor(symbol,market);
     out.quarterFinancialCurrency=reportingCurrency;
     const conversion=await currencyToJPY(reportingCurrency);
     if(conversion){

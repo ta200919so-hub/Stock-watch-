@@ -22,9 +22,14 @@ export default async function handler(req,res){
    const points=stock.points,fx=rate?.points||[];
    if(!points.length)throw Error("empty");
    if(stock.currency!==(market==="US"?"USD":"JPY"))throw Error("unexpected_currency");
-   if(market==="US"&&(rate.currency!=="JPY"||!fx.length||fx[0].date>points[0].date))throw Error("fx_unavailable");
+   if(market==="US"&&(rate.currency!=="JPY"||!fx.length))throw Error("fx_unavailable");
+   // Yahoo stock and FX histories can begin on different trading days.
+   // Never apply a future FX quote to an earlier stock price, and do not
+   // reject an otherwise usable chart because the first day lacks an FX fix.
+   const aligned=market==="US"?points.filter(p=>p.date>=fx[0].date):points;
+   if(aligned.length<2)throw Error("insufficient_fx_history");
    let lastFx=market==="US"?fx[0].price:1,fi=0;
-   const converted=points.map(p=>{while(fi<fx.length&&fx[fi].date<=p.date){lastFx=fx[fi].price;fi++}return {date:p.date,priceJPY:Math.round(p.price*lastFx*100)/100}});
+   const converted=aligned.map(p=>{while(fi<fx.length&&fx[fi].date<=p.date){lastFx=fx[fi].price;fi++}return {date:p.date,priceJPY:Math.round(p.price*lastFx*100)/100}});
    res.setHeader("Cache-Control","s-maxage=300, stale-while-revalidate=600");
    return res.status(200).json({symbol,range,points:converted});
  }catch{return res.status(502).json({error:"history_unavailable",points:[]})}

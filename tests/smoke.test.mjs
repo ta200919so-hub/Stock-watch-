@@ -70,6 +70,20 @@ test("a wholly unpriced portfolio does not show a -100% loss",()=>{
  assert.equal(x.node("#totalPnlPct").textContent,"—");
 });
 
+test("legacy holding with shares but missing buy price renders without crashing or changing storage",()=>{
+ for(const badPrice of [0,null]){
+  const incomplete={...holding,purchasePriceJPY:badPrice};
+  const original=JSON.stringify([incomplete]);
+  const x=boot({[KEY]:original});
+  assert.equal(x.stocks().length,1,"holding must remain visible for manual repair");
+  assert.match(x.node("#list").innerHTML,/Applied Materials/);
+  assert.match(x.node("#list").innerHTML,/含み損益<\\/span><strong[^>]*>—<\\/strong>/,
+    "missing purchase cost must show unknown P&L instead of crashing or claiming a gain");
+  assert.match(x.node("#list").innerHTML,/購入価格<\\/span><strong>—<\\/strong>/);
+  assert.equal(x.map.get(KEY),original,"render must not mutate the saved portfolio");
+  assert.equal(x.map.has(BACKUP),false,"render must not rotate recovery backups");
+ }
+});
 test("recovers valid backup when primary JSON is corrupt",()=>{
  const x=boot({[KEY]:"{broken",[BACKUP]:JSON.stringify([holding])});
  assert.equal(x.stocks().length,1);

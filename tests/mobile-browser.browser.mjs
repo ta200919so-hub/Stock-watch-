@@ -194,6 +194,40 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
           "financial panel update must not change stored holdings or backup");
       }finally{releaseFinance();await context.close()}
     });
+    await t.test("partially converted operating income refreshes without changing holdings",async()=>{
+      const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:"block"});
+      const holding={...sample[0],symbol:"ASML",name:"ASML",fundamentals:{
+        quarterRevenue:100,quarterOperatingIncome:20,quarterRevenueJPY:18000,
+        quarterOperatingIncomeJPY:null,quarterFinancialCurrency:"EUR",quarterFxRateJPY:180
+      }};
+      const original=JSON.stringify([holding]);
+      let requests=0;
+      try{
+        const page=await context.newPage();
+        await page.addInitScript(data=>localStorage.setItem("stock-watch-ai-v1",data),original);
+        await page.route("**/api/quote?*",route=>route.fulfill({status:503,body:"offline quote"}));
+        await page.route("**/api/fundamentals?*",route=>{
+          requests++;
+          return route.fulfill({json:{
+            quarterRevenue:100,quarterOperatingIncome:20,quarterRevenueJPY:18000,
+            quarterOperatingIncomeJPY:3600,quarterFinancialCurrency:"EUR",
+            quarterFxRateJPY:180,quarterFxDate:"2026-10-25"
+          }});
+        });
+        await page.goto(base);
+        await page.locator('[data-detail="0"]').click();
+        const income="#financialDetailSection .detail-metrics > div:nth-child(4) strong";
+        await page.waitForFunction(selector=>document.querySelector(selector)?.textContent!=="—",income);
+        assert.ok(requests>0,"missing yen operating income must trigger a fresh fundamentals request");
+        assert.match(await page.locator(income).innerText(),/円$/);
+        assert.match(await page.locator("#financialDetailSection .detail-metrics > div:nth-child(2) strong").innerText(),/円$/);
+        assert.equal(await page.evaluate(()=>localStorage.getItem("stock-watch-ai-v1")),original,
+          "financial display refresh must not overwrite portfolio data");
+        assert.equal(await page.evaluate(()=>localStorage.getItem("stock-watch-ai-backup-v1")),null,
+          "financial display refresh must not rotate the backup");
+        await page.locator(".history-chart svg").waitFor({timeout:10000});
+      }finally{await context.close()}
+    });
     await t.test("add-holding search ignores late network responses in Chromium",async()=>{
       // Intercept the page fetches directly; service workers are covered by the PWA test below.
       const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:"block"});

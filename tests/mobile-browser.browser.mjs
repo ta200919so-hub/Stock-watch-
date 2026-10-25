@@ -85,6 +85,8 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         assert.equal(await page.locator("#totalPnl").innerText(),"—");
         assert.equal(await page.locator("#totalPnlPct").innerText(),"—");
         assert.match(await page.locator("#legend").innerText(),/株価未取得/);
+        assert.equal(await page.locator("#donutTotal").innerText(),"—");
+        assert.equal(await page.locator("#holdingCount").innerText(),"2銘柄");
         assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem("stock-watch-ai-v1")).length),2);
         await page.screenshot({path:resolve(screenshots,"unknown-price-390.png")});
       }finally{await context.close()}

@@ -102,6 +102,52 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         await page.screenshot({path:resolve(screenshots,"search-390.png")});
       }finally{await context.close()}
     });
+    await t.test("yen financial refresh preserves the selected chart and portfolio",async()=>{
+      const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:"block"});
+      let releaseFinance;
+      const financeGate=new Promise(resolve=>{releaseFinance=resolve});
+      const holding={...sample[0],symbol:"ASML",name:"ASML",fundamentals:{
+        quarterRevenue:100,quarterOperatingIncome:20,quarterRevenueJPY:null,
+        quarterOperatingIncomeJPY:null,quarterFinancialCurrency:"EUR"
+      }};
+      let historyRequests=0;
+      try{
+        const page=await context.newPage();
+        await page.addInitScript(data=>localStorage.setItem("stock-watch-ai-v1",JSON.stringify(data)),[holding]);
+        await page.route("**/api/quote?*",route=>route.fulfill({status:503,body:"offline quote"}));
+        await page.route("**/api/fundamentals?*",async route=>{
+          await financeGate;
+          await route.fulfill({json:{
+            quarterRevenue:100,quarterOperatingIncome:20,quarterRevenueJPY:18000,
+            quarterOperatingIncomeJPY:3600,quarterFinancialCurrency:"EUR",
+            quarterFxRateJPY:180,quarterFxDate:"2026-10-25"
+          }});
+        });
+        page.on("request",req=>{if(req.url().includes("/api/history?"))historyRequests++});
+        await page.goto(base);
+        await page.locator('[data-detail="0"]').click();
+        await page.locator(".history-chart svg").waitFor({timeout:10000});
+        await page.locator('[data-range="3mo"]').click();
+        await page.locator(".history-chart svg").waitFor({timeout:10000});
+        const before=await page.locator(".chart-labels").textContent();
+        const requestsBefore=historyRequests;
+        const storedBefore=await page.evaluate(()=>localStorage.getItem("stock-watch-ai-v1"));
+        releaseFinance();
+        await page.waitForFunction(()=>
+          document.querySelector("#financialDetailSection .detail-metrics > div:nth-child(2) strong")?.textContent!=="—",
+          {timeout:10000});
+        assert.equal(await page.locator(".history-chart svg").count(),1,
+          "financial update must not replace the stock chart");
+        assert.equal(await page.locator(".chart-labels").textContent(),before,
+          "financial update must preserve the selected date range");
+        assert.equal(historyRequests,requestsBefore,
+          "financial update must not request a new default chart");
+        assert.match(await page.locator("#financialDetailSection").textContent(),/180.*円/,
+          "financial panel must show the new EURJPY conversion rate");
+        assert.equal(await page.evaluate(()=>localStorage.getItem("stock-watch-ai-v1")),storedBefore,
+          "financial panel update must not change stored holdings or backup");
+      }finally{releaseFinance();await context.close()}
+    });
     await t.test("add-holding search ignores late network responses in Chromium",async()=>{
       // Intercept the page fetches directly; service workers are covered by the PWA test below.
       const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:"block"});

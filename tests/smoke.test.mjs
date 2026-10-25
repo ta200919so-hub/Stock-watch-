@@ -454,3 +454,58 @@ test("editing global search during a pending detail quote cancels old navigation
  assert.equal(x.node("#globalSearch").value,"MSFT");
  assert.equal(x.map.has(KEY),false);
 });
+
+test("a quote refresh never overwrites a portfolio edit made while the request is pending",async()=>{
+ let releaseQuote;
+ const original=JSON.stringify([holding]);
+ const x=boot({[KEY]:original},false,url=>url.startsWith("/api/quote")?
+  new Promise(resolve=>{releaseQuote=resolve}):
+  Promise.resolve({ok:true,json:async()=>({items:[]})}));
+ const pending=vm.runInContext("refreshAll()",x.context);
+ assert.equal(typeof releaseQuote,"function");
+ x.node("#editIndex").value="0";
+ x.node("#editPurchasePrice").value="100";
+ x.node("#editShares").value="5";
+ x.node("#editPurchaseDate").value="";
+ x.node("#editMemo").value="edited while loading";
+ x.node("#editForm").handlers.submit({preventDefault(){}});
+ assert.equal(JSON.parse(x.map.get(KEY))[0].shares,5);
+ releaseQuote({ok:true,json:async()=>({priceJPY:350,dayChangePct:2})});
+ await pending;
+ assert.equal(x.stocks()[0].shares,5);
+ assert.equal(x.stocks()[0].currentPriceJPY,200,"late quote must not alter the edited holding");
+ assert.equal(JSON.parse(x.map.get(KEY))[0].currentPriceJPY,200);
+ assert.equal(x.map.get(BACKUP),original,"late quote must not rotate the recovery backup");
+ assert.match(x.node("#status").textContent,/古い株価の保存を中止/);
+});
+
+test("a quote refresh never resurrects a holding deleted during the request",async()=>{
+ let releaseQuote;
+ const original=JSON.stringify([holding]);
+ const x=boot({[KEY]:original},false,url=>url.startsWith("/api/quote")?
+  new Promise(resolve=>{releaseQuote=resolve}):
+  Promise.resolve({ok:true,json:async()=>({items:[]})}));
+ const pending=vm.runInContext("refreshAll()",x.context);
+ x.node("#list").handlers.click({target:{closest:selector=>
+  selector==="[data-del]"?{dataset:{del:"0"}}:null}});
+ assert.equal(x.map.get(KEY),"[]");
+ releaseQuote({ok:true,json:async()=>({priceJPY:350,dayChangePct:2})});
+ await pending;
+ assert.equal(x.stocks().length,0);
+ assert.equal(x.map.get(KEY),"[]");
+ assert.equal(x.map.get(BACKUP),original,"deletion recovery point must survive a stale refresh");
+});
+
+test("a failed quote save rolls back unsaved in-memory prices and keeps backups",async()=>{
+ const older={...holding,symbol:"OLD",name:"Older recovery"};
+ const primary=JSON.stringify([holding]),backup=JSON.stringify([older]);
+ const x=boot({[KEY]:primary,[BACKUP]:backup},true,async url=>({
+  ok:true,json:async()=>url.startsWith("/api/quote")?
+   {priceJPY:350,dayChangePct:2}:{items:[]}
+ }));
+ await vm.runInContext("refreshAll()",x.context);
+ assert.equal(x.stocks()[0].currentPriceJPY,200,"unsaved quote must not be shown as persisted");
+ assert.equal(x.map.get(KEY),primary);
+ assert.equal(x.map.get(BACKUP),backup);
+ assert.match(x.node("#status").textContent,/保存できませんでした/);
+});

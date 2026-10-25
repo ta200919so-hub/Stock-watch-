@@ -178,26 +178,49 @@ function portfolio(){
   const value=held.reduce((a,s)=>a+(s.currentPriceJPY||0)*s.shares,0);
   return {cost,value,pnl:value-cost,pct:cost?((value/cost)-1)*100:null};
 }
-function renderDetail(i,skipFinancialRefresh=false){
+function renderDetail(i){
   detailFromSearch=false;
   const s=stocks[i];if(!s)return;const c=autoComment(s),dec=decision(s),f=s.fundamentals||{};
   $("#detailTitle").textContent=displayName(s);$("#detailPrice").textContent=s.currentPriceJPY?yen(s.currentPriceJPY):"—";
   $("#detailBody").innerHTML=`
     <div class="decision ${dec.kind}"><div><span>総合判定</span><strong>${escapeHtml(dec.label)}</strong></div><p>${dec.reasons.map(escapeHtml).join(" ・ ")}</p></div>
-    <section class="detail-section"><h3>決算分析</h3><div class="fundamentals detail-metrics"><div><span>次回決算</span><strong>${Number.isFinite(f.nextEarningsDate)?new Date(f.nextEarningsDate*1000).toLocaleDateString("ja-JP"):"—"}</strong></div><div><span>四半期売上</span><strong>${Number.isFinite(f.quarterRevenueJPY)?new Intl.NumberFormat("ja-JP",{notation:"compact",maximumFractionDigits:1}).format(f.quarterRevenueJPY)+"円":"—"}</strong></div><div><span>売上 前年比</span><strong>${Number.isFinite(f.quarterRevenueGrowth)?(f.quarterRevenueGrowth>=0?"+":"")+(f.quarterRevenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>営業利益</span><strong>${Number.isFinite(f.quarterOperatingIncomeJPY)?new Intl.NumberFormat("ja-JP",{notation:"compact",maximumFractionDigits:1}).format(f.quarterOperatingIncomeJPY)+"円":"—"}</strong></div><div><span>営業利益 前年比</span><strong>${Number.isFinite(f.quarterOperatingIncomeGrowth)?(f.quarterOperatingIncomeGrowth>=0?"+":"")+(f.quarterOperatingIncomeGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>EPSサプライズ</span><strong>${Number.isFinite(f.earningsSurprisePct)?(f.earningsSurprisePct>=0?"+":"")+(f.earningsSurprisePct*100).toFixed(1)+"%":"—"}</strong></div></div><p class="muted">最新四半期と前年同期を比較。金額は日本円表示。${f.quarterFinancialCurrency&&Number.isFinite(f.quarterFxRateJPY)?`換算: 1 ${escapeHtml(f.quarterFinancialCurrency)} = ${num(f.quarterFxRateJPY)}円${f.quarterFxDate?`（${escapeHtml(f.quarterFxDate)}時点）`:"" }。`:"為替レートや決算通貨が不明な金額は — 表示。"}</p></section><section class="detail-section"><h3>企業指標</h3><div class="fundamentals detail-metrics"><div><span>PER</span><strong>${Number.isFinite(f.trailingPE)?f.trailingPE.toFixed(1)+"倍":"—"}</strong></div><div><span>予想PER</span><strong>${Number.isFinite(f.forwardPE)?f.forwardPE.toFixed(1)+"倍":"—"}</strong></div><div><span>売上成長</span><strong>${Number.isFinite(f.revenueGrowth)?(f.revenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益率</span><strong>${Number.isFinite(f.profitMargin)?(f.profitMargin*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益成長</span><strong>${Number.isFinite(f.earningsGrowth)?(f.earningsGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>目標株価</span><strong>${Number.isFinite(f.targetMeanPriceJPY)?yen(f.targetMeanPriceJPY):"—"}</strong></div></div></section>
+    <section id="financialDetailSection" class="detail-section"><h3>決算分析</h3><div class="fundamentals detail-metrics"><div><span>次回決算</span><strong>${Number.isFinite(f.nextEarningsDate)?new Date(f.nextEarningsDate*1000).toLocaleDateString("ja-JP"):"—"}</strong></div><div><span>四半期売上</span><strong>${Number.isFinite(f.quarterRevenueJPY)?new Intl.NumberFormat("ja-JP",{notation:"compact",maximumFractionDigits:1}).format(f.quarterRevenueJPY)+"円":"—"}</strong></div><div><span>売上 前年比</span><strong>${Number.isFinite(f.quarterRevenueGrowth)?(f.quarterRevenueGrowth>=0?"+":"")+(f.quarterRevenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>営業利益</span><strong>${Number.isFinite(f.quarterOperatingIncomeJPY)?new Intl.NumberFormat("ja-JP",{notation:"compact",maximumFractionDigits:1}).format(f.quarterOperatingIncomeJPY)+"円":"—"}</strong></div><div><span>営業利益 前年比</span><strong>${Number.isFinite(f.quarterOperatingIncomeGrowth)?(f.quarterOperatingIncomeGrowth>=0?"+":"")+(f.quarterOperatingIncomeGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>EPSサプライズ</span><strong>${Number.isFinite(f.earningsSurprisePct)?(f.earningsSurprisePct>=0?"+":"")+(f.earningsSurprisePct*100).toFixed(1)+"%":"—"}</strong></div></div><p class="muted">最新四半期と前年同期を比較。金額は日本円表示。${f.quarterFinancialCurrency&&Number.isFinite(f.quarterFxRateJPY)?`換算: 1 ${escapeHtml(f.quarterFinancialCurrency)} = ${num(f.quarterFxRateJPY)}円${f.quarterFxDate?`（${escapeHtml(f.quarterFxDate)}時点）`:"" }。`:"為替レートや決算通貨が不明な金額は — 表示。"}</p></section><section class="detail-section"><h3>企業指標</h3><div class="fundamentals detail-metrics"><div><span>PER</span><strong>${Number.isFinite(f.trailingPE)?f.trailingPE.toFixed(1)+"倍":"—"}</strong></div><div><span>予想PER</span><strong>${Number.isFinite(f.forwardPE)?f.forwardPE.toFixed(1)+"倍":"—"}</strong></div><div><span>売上成長</span><strong>${Number.isFinite(f.revenueGrowth)?(f.revenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益率</span><strong>${Number.isFinite(f.profitMargin)?(f.profitMargin*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益成長</span><strong>${Number.isFinite(f.earningsGrowth)?(f.earningsGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>目標株価</span><strong>${Number.isFinite(f.targetMeanPriceJPY)?yen(f.targetMeanPriceJPY):"—"}</strong></div></div></section>
     <section class="detail-section"><h3>注目テーマ</h3><div class="evidence">${companyThemes(s).map(x=>`<span>${escapeHtml(x)}</span>`).join("")}</div></section><section class="detail-section"><h3>AI見通し</h3><div class="ai outlook"><div class="ai-head"><span class="badge">${escapeHtml(c.view)}</span><span class="badge">データ信頼度 ${c.quality}</span></div><div class="evidence">${c.evidence.length?c.evidence.map(x=>`<span>${escapeHtml(x)}</span>`).join(""):'<span>取得データ待ち</span>'}</div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>基本</b><span>${escapeHtml(c.base)}</span></div><div><b>強気</b><span>${escapeHtml(c.bull)}</span></div><div><b>弱気</b><span>${escapeHtml(c.bear)}</span></div><div><b>変更条件</b><span>${escapeHtml(c.change)}</span></div></div></div></section>
     <section class="detail-section"><h3>最新ニュース</h3>${s.news?.length?`<div class="news-box">${s.news.slice(0,5).map(n=>`<a class="news-item" href="${escapeHtml(n.url||"#")}" target="_blank" rel="noopener"><div><span class="impact ${n.impact}">${n.impact==="positive"?"好材料":n.impact==="negative"?"悪材料":"中立"}</span><small>${escapeHtml(n.publisher||"News")}</small></div><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.reason)}</p></a>`).join("")}</div>`:'<p class="muted">ニュースデータ待ち</p>'}</section>`;
   showAnalytics(s);
   $("#homeView").hidden=true;$("#detailView").hidden=false;window.scrollTo(0,0);
   // Existing holdings can contain pre-upgrade fundamentals in localStorage.
   // Refresh the financial panel without touching the saved portfolio or its backup.
-  if(!skipFinancialRefresh&&Number.isFinite(f.quarterRevenue)&&!Number.isFinite(f.quarterRevenueJPY)){
-    const symbol=s.symbol;
+  if(Number.isFinite(f.quarterRevenue)&&!Number.isFinite(f.quarterRevenueJPY)){
+    const symbol=s.symbol,financialSection=$("#financialDetailSection");
     fetchTimeout("/api/fundamentals?symbol="+encodeURIComponent(symbol)+"&market="+encodeURIComponent(s.market))
       .then(r=>r.ok?r.json():null).then(next=>{
-        if(!next||stocks[i]!==s||s.symbol!==symbol||$("#detailView").hidden||detailFromSearch)return;
+        // Only update the exact panel that initiated the request. Never overwrite
+        // another holding's detail, and never reset the selected chart range.
+        if(!next||stocks[i]!==s||s.symbol!==symbol||$("#detailView").hidden||
+           detailFromSearch||!financialSection?.isConnected||
+           $("#financialDetailSection")!==financialSection)return;
         s.fundamentals={...s.fundamentals,...next};
-        renderDetail(i,true);
+        const latest=s.fundamentals,metrics=financialSection.querySelectorAll(".detail-metrics > div > strong");
+        const compactJPY=value=>Number.isFinite(value)?
+          new Intl.NumberFormat("ja-JP",{notation:"compact",maximumFractionDigits:1}).format(value)+"円":"—";
+        const growth=value=>Number.isFinite(value)?
+          (value>=0?"+":"")+(value*100).toFixed(1)+"%":"—";
+        if(metrics.length>=6){
+          metrics[0].textContent=Number.isFinite(latest.nextEarningsDate)?
+            new Date(latest.nextEarningsDate*1000).toLocaleDateString("ja-JP"):"—";
+          metrics[1].textContent=compactJPY(latest.quarterRevenueJPY);
+          metrics[2].textContent=growth(latest.quarterRevenueGrowth);
+          metrics[3].textContent=compactJPY(latest.quarterOperatingIncomeJPY);
+          metrics[4].textContent=growth(latest.quarterOperatingIncomeGrowth);
+          metrics[5].textContent=growth(latest.earningsSurprisePct);
+        }
+        const note=financialSection.querySelector("p.muted");
+        if(note)note.textContent="最新四半期と前年同期を比較。金額は日本円表示。"+
+          (latest.quarterFinancialCurrency&&Number.isFinite(latest.quarterFxRateJPY)?
+            "換算: 1 "+latest.quarterFinancialCurrency+" = "+num(latest.quarterFxRateJPY)+"円"+
+            (latest.quarterFxDate?"（"+latest.quarterFxDate+"時点）":"")+"。":
+            "為替レートや決算通貨が不明な金額は — 表示。");
       }).catch(()=>{});
   }
 }

@@ -41,7 +41,7 @@ test("US chart drops only days without prior FX, never backfills a future rate",
 test("FX from prior trading day carries forward over a missing FX day",async()=>{
  const {status,body}=await run({fx:[["2026-10-19",150],["2026-10-21",151]]});
  assert.equal(status,200);
- assert.deepEqual(body.points.map(x=>x.priceJPY),[15000,16500,18120]);
+ assert.deepEqual(Array.from(body.points,x=>x.priceJPY),[15000,16500,18120]);
 });
 test("insufficient overlapping FX dates fails instead of using future rates",async()=>{
  const {status,body}=await run({fx:[["2026-10-21",151]]});

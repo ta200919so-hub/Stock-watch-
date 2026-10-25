@@ -21,7 +21,7 @@ async function currencyToJPY(currency){
  try{
   const data=await getJson("https://api.frankfurter.dev/v1/latest?base="+encodeURIComponent(currency)+"&symbols=JPY");
   const rate=n(data?.rates?.JPY);
-  if(rate!==null&&rate>0)return {rate,date:/^\\d{4}-\\d{2}-\\d{2}$/.test(data?.date||"")?data.date:null};
+  if(rate!==null&&rate>0)return {rate,date:/^\d{4}-\d{2}-\d{2}$/.test(data?.date||"")?data.date:null};
  }catch{}
  return null;
 }

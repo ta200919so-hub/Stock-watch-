@@ -286,13 +286,15 @@ function renderRecommendations(){
   box.innerHTML=candidates.length?candidates.map(x=>`<div class="recommend"><div><strong>${escapeHtml(x.name)}</strong><span>${escapeHtml(x.sector)}</span></div><b>${x.fit}点</b><p>${escapeHtml(x.why)}</p><small>候補スコアはポートフォリオ分散を中心に算出。買い推奨ではありません。</small></div>`).join(""):'<div class="muted">候補を計算するには保有銘柄を登録してください。</div>';
 }
 function renderAllocation(){
-  const unpriced=stocks.filter(s=>s.shares>0&&s.purchasePriceJPY>0&&(!Number.isFinite(s.currentPriceJPY)||s.currentPriceJPY<=0));
-  const held=stocks.filter(s=>s.shares>0&&s.currentPriceJPY>0).map(s=>({...s,value:s.shares*s.currentPriceJPY})).sort((a,b)=>b.value-a.value);
+  // Match portfolio() eligibility: missing buy prices must not inflate the
+  // allocation chart while those same positions are absent from total value.
+  const eligible=stocks.filter(s=>Number.isFinite(s.shares)&&s.shares>0&&Number.isFinite(s.purchasePriceJPY)&&s.purchasePriceJPY>0);
+  const unpriced=eligible.filter(s=>!Number.isFinite(s.currentPriceJPY)||s.currentPriceJPY<=0);
+  const held=eligible.filter(s=>Number.isFinite(s.currentPriceJPY)&&s.currentPriceJPY>0).map(s=>({...s,value:s.shares*s.currentPriceJPY})).sort((a,b)=>b.value-a.value);
   const total=held.reduce((a,s)=>a+s.value,0);
-  $("#donutTotal").textContent=yen(total); $("#holdingCount").textContent=held.length?held.length+"銘柄":"";
+  $("#donutTotal").textContent=yen(total); $("#holdingCount").textContent=eligible.length?eligible.length+"銘柄":"";
   if(unpriced.length){
     $("#donutTotal").textContent="—";
-    $("#holdingCount").textContent=stocks.filter(s=>s.shares>0&&s.purchasePriceJPY>0).length+"銘柄";
     $("#donut").style.background="var(--panel2)";
     $("#legend").innerHTML='<span class="muted">株価未取得の銘柄があるため、構成比は表示できません</span>';
     $("#concentration").textContent="株価を更新すると全銘柄の構成比を表示します。";

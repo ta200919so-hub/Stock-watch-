@@ -80,6 +80,7 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         await page.addInitScript(data=>localStorage.setItem("stock-watch-ai-v1",JSON.stringify(data)),[sample[0]]);
         await page.goto(base);
         await page.locator('[data-detail="0"]').click();
+        assert.equal(await page.locator("#openSearch").isHidden(),true,"floating search must not cover the detail chart");
         await page.locator(".history-chart svg").waitFor({timeout:10000});
         assert.equal(await page.locator(".history-chart svg text").count(),6);
         const tickBounds=await page.locator(".history-chart svg text").evaluateAll(nodes=>
@@ -92,7 +93,9 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         assert.equal(await page.locator(".chart-labels span").count(),3);
         await page.screenshot({path:resolve(screenshots,"chart-390.png")});
         await page.locator("#backHome").click();
+        assert.equal(await page.locator("#openSearch").isVisible(),true,"floating search returns on home");
         await page.locator("#openSearch").click();
+        assert.equal(await page.locator("#openSearch").isHidden(),true,"floating search must not obscure search results");
         await page.locator("#globalSearch").fill("トヨタ");
         await page.locator(".global-result").first().waitFor({timeout:10000});
         assert.equal(await page.locator(".global-result").first().getAttribute("data-symbol"),"7203.T");

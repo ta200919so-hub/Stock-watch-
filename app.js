@@ -21,16 +21,26 @@ function migrate(s){
   };
 }
 const validStoredHolding=x=>x!==null&&typeof x==="object"&&!Array.isArray(x)&&["symbol","ticker","name"].some(k=>typeof x[k]==="string"&&x[k].trim().length>0);
+const validStoredPortfolio=x=>Array.isArray(x)&&(x.length===0||x.every(validStoredHolding));
 function readStocks(){
+  let partial=null;
   for(const key of [KEY,BACKUP_KEY]){
     try{
       const raw=localStorage.getItem(key);
       if(raw===null)continue;
       const parsed=JSON.parse(raw);
-      if(Array.isArray(parsed)){if(parsed.length===0)return [];const valid=parsed.filter(validStoredHolding);if(valid.length)return valid.map(migrate);}
+      if(Array.isArray(parsed)){
+        if(parsed.length===0){if(key===KEY||partial===null)return [];continue}
+        const valid=parsed.filter(validStoredHolding);
+        if(valid.length===parsed.length)return valid.map(migrate);
+        // Prefer a complete backup over a primary that would silently drop entries.
+        if(valid.length&&partial===null)partial=valid.map(migrate);
+      }
     }catch(e){console.warn("Portfolio recovery failed for",key,e)}
   }
-  return [];
+  // Show recognizable entries if no complete snapshot exists, but save() will
+  // refuse to overwrite the incomplete source until recovery is possible.
+  return partial||[];
 }
 let stocks=readStocks();
 function save(){
@@ -40,17 +50,17 @@ function save(){
     if(previous!==null){
       let prior;
       try{prior=JSON.parse(previous)}catch{}
-      const validPrimary=Array.isArray(prior)&&(prior.length===0||prior.some(validStoredHolding));
+      const validPrimary=validStoredPortfolio(prior);
       if(!validPrimary){
         // Do not destroy the only copy of a potentially recoverable portfolio.
         let validBackup=false;
-        try{const backup=JSON.parse(localStorage.getItem(BACKUP_KEY));validBackup=Array.isArray(backup)&&backup.some(validStoredHolding)}catch{}
+        try{const backup=JSON.parse(localStorage.getItem(BACKUP_KEY));validBackup=Array.isArray(backup)&&backup.length>0&&backup.every(validStoredHolding)}catch{}
         if(!validBackup){
           alert("保有データを安全に復元できないため、既存の保存内容を上書きせず中止しました。");
           return false;
         }
       }
-      if(Array.isArray(prior)&&prior.some(validStoredHolding)){
+      if(Array.isArray(prior)&&prior.length>0&&prior.every(validStoredHolding)){
         oldBackup=localStorage.getItem(BACKUP_KEY);
         localStorage.setItem(BACKUP_KEY,previous);
         backupUpdated=true;

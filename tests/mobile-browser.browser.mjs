@@ -226,6 +226,30 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         assert.ok(cache.includes(expectedCache),"PWA revision must install");
       }finally{await context.close()}
     });
+    await t.test("PWA serves cached app and preserves holdings while offline",async()=>{
+      const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+      try{
+        const page=await context.newPage();
+        await page.addInitScript(data=>localStorage.setItem("stock-watch-ai-v1",JSON.stringify(data)),[sample[0]]);
+        await page.goto(base);
+        await page.evaluate(async()=>navigator.serviceWorker.ready);
+        // A ready registration alone does not guarantee the current page is controlled.
+        await page.waitForFunction(()=>navigator.serviceWorker.controller!==null,{timeout:10000});
+        await context.setOffline(true);
+        await page.reload({waitUntil:"load"});
+        assert.equal(await page.locator("#list .card").count(),1,
+          "offline PWA must render the saved portfolio without network access");
+        assert.equal(await page.locator("#openAdd").isVisible(),true,
+          "cached JavaScript and CSS must keep the offline app usable");
+        await page.locator("#openAdd").click();
+        assert.equal(await page.locator("#addDialog").evaluate(el=>el.open),true);
+        assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem("stock-watch-ai-v1"))[0].symbol),"AMAT",
+          "offline navigation must not erase locally stored holdings");
+      }finally{
+        await context.setOffline(false);
+        await context.close();
+      }
+    });
   }finally{
     if(browser)await browser.close();
     await new Promise(resolve=>server.close(resolve));

@@ -310,8 +310,18 @@ async function refreshOne(s){
   if(!Number.isFinite(q?.priceJPY)||q.priceJPY<=0)throw new Error("invalid_quote");
   s.currentPriceJPY=q.priceJPY;
   s.dayChangePct=Number.isFinite(q.dayChangePct)?q.dayChangePct:null;
-  try{const fr=await fetchTimeout(`/api/fundamentals?symbol=${encodeURIComponent(s.symbol)}&market=${s.market}`);if(fr.ok)s.fundamentals=await fr.json()}catch(e){}
-  try{const nr=await fetchTimeout(`/api/news?symbol=${encodeURIComponent(s.symbol)}`);if(nr.ok){const nd=await nr.json();s.news=nd.items||[]}}catch(e){}
+  // These independent requests can run together after the quote succeeds.
+  // Failure of either must not prevent the other or erase a valid quote.
+  await Promise.all([
+    (async()=>{try{
+      const fr=await fetchTimeout(`/api/fundamentals?symbol=${encodeURIComponent(s.symbol)}&market=${s.market}`);
+      if(fr.ok)s.fundamentals=await fr.json();
+    }catch(e){}})(),
+    (async()=>{try{
+      const nr=await fetchTimeout(`/api/news?symbol=${encodeURIComponent(s.symbol)}`);
+      if(nr.ok){const nd=await nr.json();s.news=nd.items||[]}
+    }catch(e){}})()
+  ]);
   s.updatedAt=Date.now();
   return s;
 }
@@ -324,10 +334,17 @@ async function refreshAll(){
   const refreshed=originalStocks.map(s=>({...s}));
   let ok=0;
   try{
-    for(const s of refreshed){
-      if(!s.symbol)continue;
-      try{await refreshOne(s);ok++}catch(e){}
-    }
+    // Bound network concurrency on iPhone: avoid one slow ticker blocking
+    // every later holding without flooding the upstream quote API.
+    let cursor=0;
+    const worker=async()=>{
+      while(cursor<refreshed.length){
+        const s=refreshed[cursor++];
+        if(!s.symbol)continue;
+        try{await refreshOne(s);ok++}catch(e){}
+      }
+    };
+    await Promise.all(Array.from({length:Math.min(3,refreshed.length)},()=>worker()));
     // Editing, adding or deleting holdings during network requests wins over
     // the stale refresh snapshot, including its backup rotation.
     if(revision!==portfolioRevision||stocks!==originalStocks){

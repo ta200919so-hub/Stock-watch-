@@ -4,7 +4,7 @@ import {readFileSync} from "node:fs";
 import vm from "node:vm";
 
 const source=readFileSync(new URL("../api/fundamentals.js",import.meta.url),"utf8");
-function run({currency="EUR",fx=180,market="US",currencyMissing=false,symbol="ASML",fallbackFx=null,targetPrice=null}={}){
+function run({currency="EUR",fx=180,market="US",currencyMissing=false,symbol="ASML",fallbackFx=null,targetPrice=null,fxQuoteCurrency="JPY"}={}){
  const requests=[];
  const series=["quarterlyTotalRevenue","quarterlyOperatingIncome"].map((type,i)=>({
   meta:{type:[type]},
@@ -17,7 +17,7 @@ function run({currency="EUR",fx=180,market="US",currencyMissing=false,symbol="AS
   if(url.includes("api.frankfurter.dev"))return {ok:fallbackFx!==null,status:503,json:async()=>({date:"2026-10-23",rates:{JPY:fallbackFx}})};
   if(url.includes("finance/chart/")){
    const isFx=url.includes("EURJPY%3DX")||url.includes("EURJPY=X")||url.includes("JPY%3DX")||url.includes("JPY=X");
-   return {ok:isFx&&fx!==null,status:404,json:async()=>({chart:{result:[{meta:{regularMarketPrice:fx,regularMarketTime:1792886400}}]}})};
+   return {ok:isFx&&fx!==null,status:404,json:async()=>({chart:{result:[{meta:{regularMarketPrice:fx,regularMarketTime:1792886400,currency:isFx?fxQuoteCurrency:currency}}]}})};
   }
   throw Error("unexpected "+url);
  };
@@ -95,4 +95,19 @@ test("zero or negative analyst targets are not reported as valid yen prices",asy
   const {body}=await run({market:"JP",currency:"JPY",targetPrice});
   assert.equal(body.targetMeanPriceJPY,null,String(targetPrice));
  }
+});
+
+test("FX quote in the wrong currency cannot silently convert US analyst targets",async()=>{
+ const {body}=await run({targetPrice:200,fx:180,fxQuoteCurrency:"USD"});
+ assert.equal(body.targetMeanPrice,200);
+ assert.equal(body.targetMeanPriceJPY,null);
+ assert.equal(body.quarterRevenueJPY,null);
+ assert.equal(body.quarterOperatingIncomeJPY,null);
+});
+test("financial FX falls back to an independently quoted JPY rate on currency mismatch",async()=>{
+ const {body,requests}=await run({currencyMissing:true,fx:180,fxQuoteCurrency:"USD",fallbackFx:182.5});
+ assert.equal(body.quarterFxRateJPY,182.5);
+ assert.equal(body.quarterRevenueJPY,11662000000*182.5);
+ assert.equal(body.quarterOperatingIncomeJPY,5173000000*182.5);
+ assert.ok(requests.some(x=>x.includes("api.frankfurter.dev")));
 });

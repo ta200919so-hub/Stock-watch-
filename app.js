@@ -222,7 +222,7 @@ function renderAllocation(){
   const held=stocks.filter(s=>s.shares>0&&s.currentPriceJPY>0).map(s=>({...s,value:s.shares*s.currentPriceJPY})).sort((a,b)=>b.value-a.value);
   const total=held.reduce((a,s)=>a+s.value,0);
   $("#donutTotal").textContent=yen(total); $("#holdingCount").textContent=held.length?held.length+"銘柄":"";
-  if(hasUnknownPrice){$("#donut").style.background="var(--panel2)";$("#legend").innerHTML='<span class="muted">株価未取得の銘柄があるため、構成比は表示できません</span>';$("#concentration").textContent="株価を更新すると全銘柄の構成比を表示します。";return}
+  if(hasUnknownPrice){$("#donutTotal").textContent="—";$("#holdingCount").textContent=stocks.filter(s=>s.shares>0&&s.purchasePriceJPY>0).length+"銘柄";$("#donut").style.background="var(--panel2)";$("#legend").innerHTML='<span class="muted">株価未取得の銘柄があるため、構成比は表示できません</span>';$("#concentration").textContent="株価を更新すると全銘柄の構成比を表示します。";return}
   if(!total){$("#donut").style.background="var(--panel2)";$("#legend").innerHTML='<span class="muted">現在株価を取得すると表示されます</span>';$("#concentration").textContent="保有データが揃うと構成比を分析します。";return}
   const colors=["#7c8cff","#4ade80","#fbbf24","#fb7185","#38bdf8","#c084fc","#fb923c","#94a3b8"];
   let at=0,stops=[];held.forEach((s,i)=>{const p=s.value/total*100;stops.push(`${colors[i%colors.length]} ${at}% ${at+p}%`);at+=p});

@@ -26,7 +26,7 @@ test("JPY quote remains in yen without fetching FX",async()=>{
   const {res,requested}=await quote();
   assert.equal(res.code,200);
   assert.equal(res.body.priceJPY,3000);
-  assert.equal(res.body.dayChangePct,100/2900*100);
+  assert.ok(Math.abs(res.body.dayChangePct-(100/2900*100))<1e-10);
   assert.equal(requested.length,1);
 });
 test("USD quote converts only with a valid JPY FX rate",async()=>{

@@ -51,6 +51,8 @@ test("unknown quote never creates a fictitious 100% portfolio loss or allocation
  assert.equal(x.node("#totalPnl").textContent,"—");
  assert.equal(x.node("#totalPnlPct").textContent,"—");
  assert.equal(x.node("#donut").style.background,"var(--panel2)");
+ assert.equal(x.node("#donutTotal").textContent,"—");
+ assert.equal(x.node("#holdingCount").textContent,"2銘柄");
  assert.match(x.node("#legend").innerHTML,/株価未取得/);
  assert.equal(JSON.parse(x.map.get(KEY)).length,2,"render must not alter stored holdings");
  const known=boot({[KEY]:JSON.stringify([holding])});

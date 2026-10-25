@@ -51,7 +51,7 @@ test("all valid holdings retain correct valuation and percentages",()=>{
   const ui=render([holding("First",100,100),holding("Second",100,300)]);
   assert.equal(ui["#donutTotal"].textContent,"¥800");
   assert.equal(ui["#holdingCount"].textContent,"2銘柄");
-  assert.match(ui["#legend"].innerHTML,/First.*25\\.0%/);
-  assert.match(ui["#legend"].innerHTML,/Second.*75\\.0%/);
+  assert.match(ui["#legend"].innerHTML,/First.*25[.]0%/);
+  assert.match(ui["#legend"].innerHTML,/Second.*75[.]0%/);
   assert.match(ui["#donut"].style.background,/conic-gradient/);
 });

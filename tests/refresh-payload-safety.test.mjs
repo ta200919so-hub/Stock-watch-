@@ -65,3 +65,9 @@ test("valid fundamentals from a different numeric field still refresh",async()=>
   await run(s,{fundamentals:{marketCap:1000000,unavailable:false},news:{items:[]}});
   assert.equal(s.fundamentals.marketCap,1000000);
 });
+test("unavailable partial fundamentals do not replace previously saved complete metrics",async()=>{
+  const s=holding(),oldFundamentals=s.fundamentals;
+  await run(s,{fundamentals:{unavailable:true,quarterRevenueJPY:100000,source:[]},news:{items:[],unavailable:true}});
+  assert.equal(s.fundamentals,oldFundamentals);
+  assert.equal(s.fundamentals.trailingPE,22);
+});

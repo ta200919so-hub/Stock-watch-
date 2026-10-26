@@ -262,10 +262,13 @@ function renderDetail(i){
       .then(r=>r.ok?r.json():null).then(next=>{
         // Only update the exact panel that initiated the request. Never overwrite
         // another holding's detail, and never reset the selected chart range.
-        if(!next||stocks[i]!==s||s.symbol!==symbol||$("#detailView").hidden||
+        if(!next||typeof next!=="object"||Array.isArray(next)||next.unavailable===true||
+           !((Number.isFinite(next.quarterRevenue)&&Number.isFinite(next.quarterRevenueJPY))||
+             (Number.isFinite(next.quarterOperatingIncome)&&Number.isFinite(next.quarterOperatingIncomeJPY)))||
+           stocks[i]!==s||s.symbol!==symbol||$("#detailView").hidden||
            detailFromSearch||!financialSection?.isConnected||
            $("#financialDetailSection")!==financialSection)return;
-        s.fundamentals={...s.fundamentals,...next};
+        s.fundamentals=mergeFundamentals(s.fundamentals,next);
         const latest=s.fundamentals,metrics=financialSection.querySelectorAll(".detail-metrics > div > strong");
         const compactJPY=value=>Number.isFinite(value)?
           new Intl.NumberFormat("ja-JP",{notation:"compact",maximumFractionDigits:1}).format(value)+"円":"—";
@@ -347,6 +350,44 @@ function status(msg,type=""){
   const el=$("#status"); el.hidden=!msg; el.textContent=msg; el.className=`status ${type}`;
 }
 async function fetchTimeout(url,ms=8000){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);try{return await fetch(url,{signal:c.signal})}finally{clearTimeout(t)}}
+function mergeFundamentals(previous,next){
+  const old=previous&&typeof previous==="object"&&!Array.isArray(previous)?previous:{};
+  const merged={...old};
+  // Partial successful API responses must not null out previously saved metrics.
+  for(const key of ["trailingPE","forwardPE","marketCap","profitMargin","revenueGrowth","earningsGrowth","nextEarningsDate","earningsSurprisePct"]){
+    if(Number.isFinite(next[key]))merged[key]=next[key];
+  }
+  if(Number.isFinite(next.targetMeanPrice)){
+    merged.targetMeanPrice=next.targetMeanPrice;
+    merged.targetMeanPriceJPY=Number.isFinite(next.targetMeanPriceJPY)?next.targetMeanPriceJPY:null;
+  }
+  for(const [raw,converted,growth] of [
+    ["quarterRevenue","quarterRevenueJPY","quarterRevenueGrowth"],
+    ["quarterOperatingIncome","quarterOperatingIncomeJPY","quarterOperatingIncomeGrowth"]
+  ]){
+    if(Number.isFinite(next[raw])){
+      merged[raw]=next[raw];
+      // A new raw quarter must never reuse an old yen conversion or growth figure.
+      merged[converted]=Number.isFinite(next[converted])?next[converted]:null;
+      merged[growth]=Number.isFinite(next[growth])?next[growth]:null;
+    }
+  }
+  if(Number.isFinite(next.quarterRevenue)||Number.isFinite(next.quarterOperatingIncome)){
+    const currency=next.quarterFinancialCurrency;
+    merged.quarterFinancialCurrency=typeof currency==="string"&&/^[A-Z]{3}$/.test(currency)?currency:null;
+    merged.quarterFxRateJPY=Number.isFinite(next.quarterFxRateJPY)&&next.quarterFxRateJPY>0?next.quarterFxRateJPY:null;
+    const date=next.quarterFxDate;
+    merged.quarterFxDate=typeof date==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(date)?date:null;
+  }
+  if(typeof next.recommendationKey==="string"&&next.recommendationKey.trim())merged.recommendationKey=next.recommendationKey;
+  if(Array.isArray(next.source)){
+    const sources=next.source.filter(x=>typeof x==="string"&&x.trim()).slice(0,5);
+    if(sources.length)merged.source=sources;
+  }
+  merged.unavailable=false;
+  return merged;
+}
+
 async function refreshOne(s){
   if(!s.symbol)return s;
   const r=await fetchTimeout(`/api/quote?symbol=${encodeURIComponent(s.symbol)}&market=${s.market}`);
@@ -374,7 +415,7 @@ async function refreshOne(s){
             .some(key=>Number.isFinite(data[key]));
           if(data.unavailable===true){
             if(!s.fundamentals)s.fundamentals=data;
-          }else if(hasMetrics)s.fundamentals=data;
+          }else if(hasMetrics)s.fundamentals=mergeFundamentals(s.fundamentals,data);
         }
       }
     }catch(e){}})(),

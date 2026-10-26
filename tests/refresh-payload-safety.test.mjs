@@ -7,7 +7,9 @@ const source=readFileSync(new URL("../app.js",import.meta.url),"utf8");
 const start=source.indexOf("async function refreshOne(s){");
 const end=source.indexOf("\nasync function refreshAll()",start);
 assert.ok(start>=0&&end>start,"refreshOne source must be found");
-const refreshCode=source.slice(start,end);
+const helperStart=source.indexOf("function mergeFundamentals(previous,next){");
+assert.ok(helperStart>=0&&helperStart<start,"fundamentals merge helper must be found");
+const refreshCode=source.slice(helperStart,end);
 const holding=()=>({
   symbol:"AMAT",market:"US",currentPriceJPY:100,dayChangePct:0,
   fundamentals:{trailingPE:22},news:[{title:"Existing news"}]
@@ -82,4 +84,29 @@ test("mixed valid and malformed news articles keep only usable headlines",async(
   const s=holding();
   await run(s,{fundamentals:{unavailable:true},news:{items:[{},{"title":"Fresh update"},{title:"   "},null]}});
   assert.deepEqual(s.news.map(item=>item.title),["Fresh update"]);
+});
+
+test("quarterly-only success preserves saved annual metrics instead of clearing them",async()=>{
+  const s=holding();s.fundamentals={trailingPE:22,profitMargin:0.2,marketCap:1000000,quarterRevenue:400,quarterRevenueJPY:60000};
+  await run(s,{fundamentals:{unavailable:false,trailingPE:null,profitMargin:null,marketCap:null,quarterRevenue:500,quarterRevenueJPY:75000,quarterOperatingIncome:80,quarterOperatingIncomeJPY:12000},news:{items:[]}});
+  assert.equal(s.fundamentals.trailingPE,22);
+  assert.equal(s.fundamentals.profitMargin,0.2);
+  assert.equal(s.fundamentals.marketCap,1000000);
+  assert.equal(s.fundamentals.quarterRevenue,500);
+  assert.equal(s.fundamentals.quarterRevenueJPY,75000);
+  assert.equal(s.fundamentals.quarterOperatingIncomeJPY,12000);
+});
+test("new raw quarter without FX clears stale yen amount but keeps unrelated metrics",async()=>{
+  const s=holding();s.fundamentals={trailingPE:22,quarterRevenue:400,quarterRevenueJPY:60000,quarterRevenueGrowth:0.2};
+  await run(s,{fundamentals:{unavailable:false,quarterRevenue:500,quarterRevenueJPY:null,quarterRevenueGrowth:null,quarterFinancialCurrency:null,quarterFxRateJPY:null},news:{items:[]}});
+  assert.equal(s.fundamentals.trailingPE,22);
+  assert.equal(s.fundamentals.quarterRevenue,500);
+  assert.equal(s.fundamentals.quarterRevenueJPY,null);
+  assert.equal(s.fundamentals.quarterRevenueGrowth,null);
+});
+test("partial metric refresh does not accept malformed non-finite fields",async()=>{
+  const s=holding();s.fundamentals={trailingPE:22,marketCap:1000};
+  await run(s,{fundamentals:{unavailable:false,marketCap:2000,trailingPE:Infinity},news:{items:[]}});
+  assert.equal(s.fundamentals.trailingPE,22);
+  assert.equal(s.fundamentals.marketCap,2000);
 });

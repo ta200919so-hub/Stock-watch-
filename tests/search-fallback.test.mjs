@@ -34,3 +34,38 @@ for(const [name,q,fetch,status,symbol,degraded] of cases)test(name,async()=>{
  assert.equal(Boolean(r.body.degraded),degraded);
  if(degraded)assert.equal(r.headers['Cache-Control'],'no-store');
 });
+
+test('malformed upstream search payload is not treated as an empty result',async()=>{
+ const r=await run({q:'unknown-ticker',market:'JP'},async()=>({ok:true,json:async()=>({quotes:null})}));
+ assert.equal(r.code,502);
+ assert.equal(r.body.error,'search_failed');
+});
+test('known ticker uses safe degraded fallback on malformed upstream payload',async()=>{
+ const r=await run({q:'AMAT',market:'US'},async()=>({ok:true,json:async()=>({quotes:{bad:true}})}));
+ assert.equal(r.code,200);
+ assert.equal(r.body.results[0].symbol,'AMAT');
+ assert.equal(r.body.degraded,true);
+ assert.equal(r.headers['Cache-Control'],'no-store');
+});
+test('rejects invalid upstream symbols, null entries and non-equities',async()=>{
+ const quotes=[
+  null,{symbol:'7203.T',quoteType:'EQUITY',longname:'Toyota'},
+  {symbol:'7203.T',quoteType:'EQUITY',longname:'Duplicate'},
+  {symbol:'285A.T',quoteType:'EQUITY',longname:'New code'},
+  {symbol:'7203.T" onclick="evil()',quoteType:'EQUITY'},
+  {symbol:'AAPL',quoteType:'EQUITY'},
+  {symbol:'1306.T',quoteType:'ETF'},
+  {symbol:null,quoteType:'EQUITY'}
+ ];
+ const r=await run({q:'test',market:'JP'},async()=>({ok:true,json:async()=>({quotes})}));
+ assert.equal(r.code,200);
+ assert.deepEqual(Array.from(r.body.results,x=>x.symbol),['7203.T','285A.T']);
+});
+test('non-string upstream company names fall back to the safe ticker',async()=>{
+ const r=await run({q:'test',market:'US'},async()=>({ok:true,json:async()=>({quotes:[
+  {symbol:'XYZ',quoteType:'EQUITY',longname:{unsafe:true},shortname:12},
+  {symbol:'BRK-B',quoteType:'EQUITY',shortname:'Berkshire'}
+ ]})}));
+ assert.equal(r.code,200);
+ assert.deepEqual(Array.from(r.body.results,x=>x.name),['XYZ','Berkshire']);
+});

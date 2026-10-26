@@ -55,6 +55,15 @@ function currencyInfoOf(entries){
    codes.add(code);
   }
  }
+ // The conversion applies to the selected latest quarter, not a prior one.
+ // An unlabeled latest value cannot safely inherit a historical currency.
+ const ordered=financialEntries(entries);
+ const current=ordered[ordered.length-1];
+ if(current&&codes.size){
+  const latestCodes=[current?.currencyCode,current?.currency,current?.reportedValue?.currencyCode]
+   .filter(code=>code!=null&&code!=="");
+  if(!latestCodes.length)return {currency:null,conflict:true};
+ }
  return {currency:codes.size===1?[...codes][0]:null,conflict:codes.size>1};
 }
 // ASML reports in EUR even when its NASDAQ-listed shares trade in USD.

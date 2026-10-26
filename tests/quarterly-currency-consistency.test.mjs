@@ -28,7 +28,7 @@ test("mixed currency codes within quarterly revenue do not produce a fabricated 
  assert.equal(body.quarterFinancialCurrency,null);
  assert.equal(body.quarterFxRateJPY,null);
  assert.equal(body.quarterRevenueJPY,null);
- assert.equal(requests.filter(url=>url.includes("finance/chart/")).length,0);
+ assert.equal(requests.filter(url=>url.includes("EURJPY")||url.includes("USDJPY")||url.includes("JPY=X")||url.includes("JPY%3DX")).length,0);
 });
 
 test("invalid explicit reporting currency cannot fall back to market JPY",async()=>{

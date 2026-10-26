@@ -22,7 +22,9 @@ export default async function handler(req, res) {
   try {
     const meta = await chart(symbol);
     const raw = Number(meta?.regularMarketPrice);
-    // chartPreviousClose can represent the first close in a multi-day chart,\n    // not the prior trading session. Never label a 5-day change as daily.\n    const previous = Number(meta?.previousClose);
+    // chartPreviousClose can represent the first close in a multi-day chart,
+    // not the prior trading session. Never label a 5-day change as daily.
+    const previous = Number(meta?.previousClose);
     const prev = Number.isFinite(previous) && previous > 0 ? previous : null;
     const expectedCurrency = market === "US" ? "USD" : "JPY";
     // A valid price in the wrong currency would silently corrupt yen valuations.

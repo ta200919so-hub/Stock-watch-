@@ -59,6 +59,7 @@ export default async function handler(req,res){
  const target=out.targetMeanPrice;
  const convertedTarget=target!==null&&target>0&&fx!==null&&fx>0?target*fx:null;
  out.targetMeanPriceJPY=convertedTarget!==null&&Number.isFinite(convertedTarget)?convertedTarget:null;
- out.unavailable=![out.trailingPE,out.forwardPE,out.marketCap,out.profitMargin,out.revenueGrowth,out.earningsGrowth,out.targetMeanPrice].some(v=>v!=null);
+ // Quarterly-only results are still usable even when Yahoo blocks annual/valuation endpoints.
+ out.unavailable=![out.trailingPE,out.forwardPE,out.marketCap,out.profitMargin,out.revenueGrowth,out.earningsGrowth,out.targetMeanPrice,out.targetMeanPriceJPY,out.quarterRevenue,out.quarterOperatingIncome,out.quarterRevenueJPY,out.quarterOperatingIncomeJPY,out.quarterRevenueGrowth,out.quarterOperatingIncomeGrowth,out.earningsSurprisePct].some(v=>v!=null);
  res.setHeader("Cache-Control","s-maxage=300, stale-while-revalidate=600");return res.status(200).json(out);
 }

@@ -118,22 +118,25 @@ export default async function handler(req,res){
    const revenue=quarterSnapshot(qr),operating=quarterSnapshot(qo);
    out.quarterRevenue=revenue.value;out.quarterRevenueGrowth=revenue.growth;
    out.quarterOperatingIncome=operating.value;out.quarterOperatingIncomeGrowth=operating.growth;
-   const qrInfo=currencyInfoOf(qr),qoInfo=currencyInfoOf(qo);
-   const qrCurrency=qrInfo.currency,qoCurrency=qoInfo.currency;
-   // The stock's trading currency is not necessarily its financial reporting currency.
-   // Never silently treat EUR/USD reports as JPY or use a fabricated FX rate.
-   if(qrInfo.conflict||qoInfo.conflict||(qrCurrency&&qoCurrency&&qrCurrency!==qoCurrency)){out.quarterFinancialCurrency=null}
-   else{
-    const reportingCurrency=qrCurrency||qoCurrency||reportingCurrencyFor(symbol,market);
-    out.quarterFinancialCurrency=reportingCurrency;
-    const conversion=await currencyToJPY(reportingCurrency);
-    if(conversion){
-     out.quarterFxRateJPY=conversion.rate;out.quarterFxDate=conversion.date;
-     // If only one series declares a currency, do not assume the other
-     // unlabeled series uses it. Fallback is allowed only when both are unlabeled.
-     const bothUnlabeled=qrCurrency===null&&qoCurrency===null;
-     if(out.quarterRevenue!==null&&(qrCurrency===reportingCurrency||bothUnlabeled))out.quarterRevenueJPY=out.quarterRevenue*conversion.rate;
-     if(out.quarterOperatingIncome!==null&&(qoCurrency===reportingCurrency||bothUnlabeled))out.quarterOperatingIncomeJPY=out.quarterOperatingIncome*conversion.rate;
+   // Do not infer reporting currency or FX when no quarterly observations exist.
+   if(out.quarterRevenue!==null||out.quarterOperatingIncome!==null){
+    const qrInfo=currencyInfoOf(qr),qoInfo=currencyInfoOf(qo);
+    const qrCurrency=qrInfo.currency,qoCurrency=qoInfo.currency;
+    // The stock's trading currency is not necessarily its financial reporting currency.
+    // Never silently treat EUR/USD reports as JPY or use a fabricated FX rate.
+    if(qrInfo.conflict||qoInfo.conflict||(qrCurrency&&qoCurrency&&qrCurrency!==qoCurrency)){out.quarterFinancialCurrency=null}
+    else{
+     const reportingCurrency=qrCurrency||qoCurrency||reportingCurrencyFor(symbol,market);
+     out.quarterFinancialCurrency=reportingCurrency;
+     const conversion=await currencyToJPY(reportingCurrency);
+     if(conversion){
+      out.quarterFxRateJPY=conversion.rate;out.quarterFxDate=conversion.date;
+      // If only one series declares a currency, do not assume the other
+      // unlabeled series uses it. Fallback is allowed only when both are unlabeled.
+      const bothUnlabeled=qrCurrency===null&&qoCurrency===null;
+      if(out.quarterRevenue!==null&&(qrCurrency===reportingCurrency||bothUnlabeled))out.quarterRevenueJPY=out.quarterRevenue*conversion.rate;
+      if(out.quarterOperatingIncome!==null&&(qoCurrency===reportingCurrency||bothUnlabeled))out.quarterOperatingIncomeJPY=out.quarterOperatingIncome*conversion.rate;
+     }
     }
    }
    if(Object.values(out).some(v=>v!=null&&!Array.isArray(v)))out.source.push("Yahoo fundamentals timeseries");

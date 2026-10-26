@@ -72,3 +72,10 @@ body:has(#homeView[hidden]) #openSearch{display:none}
     margin:20px 0 88px;
   }
 }
+
+/* Keep long Japanese stock names separate from the quote in narrow detail headers. */
+#detailView .detail-header{display:grid;grid-template-columns:minmax(64px,auto) minmax(0,1fr) max-content;gap:8px;align-items:center;padding-inline:16px}
+#detailView .detail-header>div{min-width:0}
+#detailView .detail-header h2{overflow-wrap:anywhere;line-height:1.3}
+#detailView .detail-header>strong{white-space:nowrap}
+@media(max-width:420px){#detailView .detail-header h2{font-size:18px}#detailView .detail-header>strong{font-size:16px}}

@@ -22,6 +22,8 @@ function safeNewsUrl(value){
   }catch{return "#"}
 }
 const safeNewsImpact=value=>value==="positive"?"positive":value==="negative"?"negative":"neutral";
+// News from old localStorage snapshots or external APIs may contain non-article values.
+const usableNewsItems=value=>Array.isArray(value)?value.filter(n=>n&&typeof n==="object"&&!Array.isArray(n)):[];
 
 function migrate(s){
   if("purchasePriceJPY" in s) return s;
@@ -151,7 +153,7 @@ function portfolioWeight(s){
 }
 function decision(s){
   const base=stockScore(s);if(base===null)return {label:"データ待ち",kind:"neutral",score:null,reasons:["株価と保有情報を更新してください。"]};
-  let score=base,reasons=[];const f=s.fundamentals||{},news=s.news||[];
+  let score=base,reasons=[];const f=s.fundamentals||{},news=usableNewsItems(s.news);
   const weight=portfolioWeight(s);
   const pos=news.filter(n=>n.impact==="positive").length,neg=news.filter(n=>n.impact==="negative").length;
   if(pos>neg){score+=5;reasons.push("直近ニュースは好材料が優勢");}else if(neg>pos){score-=7;reasons.push("直近ニュースは悪材料が優勢");}
@@ -165,7 +167,7 @@ function decision(s){
   return {label,kind,score,reasons:reasons.slice(0,3)};
 }
 function autoComment(s){
- const d=Number.isFinite(s.dayChangePct)?s.dayChangePct:null,f=s.fundamentals||{},news=s.news||[],name=displayName(s),sector=SECTORS[s.symbol]||"事業";
+ const d=Number.isFinite(s.dayChangePct)?s.dayChangePct:null,f=s.fundamentals||{},news=usableNewsItems(s.news),name=displayName(s),sector=SECTORS[s.symbol]||"事業";
  const pos=news.filter(n=>n.impact==="positive"),neg=news.filter(n=>n.impact==="negative");let score=50,evidence=[],drivers=[];
  if(Number.isFinite(f.revenueGrowth)){score+=f.revenueGrowth>0.1?12:f.revenueGrowth<0?-12:3;evidence.push(`売上 ${f.revenueGrowth>=0?"+":""}${(f.revenueGrowth*100).toFixed(1)}%`);drivers.push(f.revenueGrowth>0?`売上が前年比${(f.revenueGrowth*100).toFixed(1)}%伸びている`:`売上が前年比${Math.abs(f.revenueGrowth*100).toFixed(1)}%減っている`)}
  if(Number.isFinite(f.earningsGrowth)){score+=f.earningsGrowth>0.1?12:f.earningsGrowth<0?-12:2;evidence.push(`利益 ${f.earningsGrowth>=0?"+":""}${(f.earningsGrowth*100).toFixed(1)}%`);drivers.push(f.earningsGrowth>0?"利益成長が売上の伸びを支えている":"利益成長が弱く採算の確認が必要")}
@@ -183,7 +185,7 @@ function autoComment(s){
  return {view,score,short,base,bull,bear,change,evidence:evidence.slice(0,5),quality};
 }
 function focusScore(s){
-  let score=0,reasons=[];const d=Number.isFinite(s.dayChangePct)?s.dayChangePct:0,dec=decision(s),news=s.news||[];
+  let score=0,reasons=[];const d=Number.isFinite(s.dayChangePct)?s.dayChangePct:0,dec=decision(s),news=usableNewsItems(s.news);
   const weight=portfolioWeight(s);
   if(Math.abs(d)>=3){score+=25+Math.min(15,Math.abs(d)*2);reasons.push(`前日比 ${d>=0?"+":""}${d.toFixed(1)}% と値動き大`);}
   const neg=news.filter(n=>n.impact==="negative").length,pos=news.filter(n=>n.impact==="positive").length;
@@ -210,12 +212,14 @@ function portfolio(){
 function renderDetail(i){
   detailFromSearch=false;
   const s=stocks[i];if(!s)return;const c=autoComment(s),dec=decision(s),f=s.fundamentals||{};
+  // Older saved records and malformed upstream responses must not break detail rendering.
+  const newsItems=usableNewsItems(s.news);
   $("#detailTitle").textContent=displayName(s);$("#detailPrice").textContent=s.currentPriceJPY?yen(s.currentPriceJPY):"—";
   $("#detailBody").innerHTML=`
     <div class="decision ${dec.kind}"><div><span>総合判定</span><strong>${escapeHtml(dec.label)}</strong></div><p>${dec.reasons.map(escapeHtml).join(" ・ ")}</p></div>
     <section id="financialDetailSection" class="detail-section"><h3>決算分析</h3><div class="fundamentals detail-metrics"><div><span>次回決算</span><strong>${Number.isFinite(f.nextEarningsDate)?new Date(f.nextEarningsDate*1000).toLocaleDateString("ja-JP"):"—"}</strong></div><div><span>四半期売上</span><strong>${Number.isFinite(f.quarterRevenueJPY)?new Intl.NumberFormat("ja-JP",{notation:"compact",maximumFractionDigits:1}).format(f.quarterRevenueJPY)+"円":"—"}</strong></div><div><span>売上 前年比</span><strong>${Number.isFinite(f.quarterRevenueGrowth)?(f.quarterRevenueGrowth>=0?"+":"")+(f.quarterRevenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>営業利益</span><strong>${Number.isFinite(f.quarterOperatingIncomeJPY)?new Intl.NumberFormat("ja-JP",{notation:"compact",maximumFractionDigits:1}).format(f.quarterOperatingIncomeJPY)+"円":"—"}</strong></div><div><span>営業利益 前年比</span><strong>${Number.isFinite(f.quarterOperatingIncomeGrowth)?(f.quarterOperatingIncomeGrowth>=0?"+":"")+(f.quarterOperatingIncomeGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>EPSサプライズ</span><strong>${Number.isFinite(f.earningsSurprisePct)?(f.earningsSurprisePct>=0?"+":"")+(f.earningsSurprisePct*100).toFixed(1)+"%":"—"}</strong></div></div><p class="muted">最新四半期と前年同期を比較。金額は日本円表示。${f.quarterFinancialCurrency&&Number.isFinite(f.quarterFxRateJPY)?`換算: 1 ${escapeHtml(f.quarterFinancialCurrency)} = ${num(f.quarterFxRateJPY)}円${f.quarterFxDate?`（${escapeHtml(f.quarterFxDate)}時点）`:"" }。`:"為替レートや決算通貨が不明な金額は — 表示。"}</p></section><section class="detail-section"><h3>企業指標</h3><div class="fundamentals detail-metrics"><div><span>PER</span><strong>${Number.isFinite(f.trailingPE)?f.trailingPE.toFixed(1)+"倍":"—"}</strong></div><div><span>予想PER</span><strong>${Number.isFinite(f.forwardPE)?f.forwardPE.toFixed(1)+"倍":"—"}</strong></div><div><span>売上成長</span><strong>${Number.isFinite(f.revenueGrowth)?(f.revenueGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益率</span><strong>${Number.isFinite(f.profitMargin)?(f.profitMargin*100).toFixed(1)+"%":"—"}</strong></div><div><span>利益成長</span><strong>${Number.isFinite(f.earningsGrowth)?(f.earningsGrowth*100).toFixed(1)+"%":"—"}</strong></div><div><span>目標株価</span><strong>${Number.isFinite(f.targetMeanPriceJPY)?yen(f.targetMeanPriceJPY):"—"}</strong></div></div></section>
     <section class="detail-section"><h3>注目テーマ</h3><div class="evidence">${companyThemes(s).map(x=>`<span>${escapeHtml(x)}</span>`).join("")}</div></section><section class="detail-section"><h3>AI見通し</h3><div class="ai outlook"><div class="ai-head"><span class="badge">${escapeHtml(c.view)}</span><span class="badge">データ信頼度 ${c.quality}</span></div><div class="evidence">${c.evidence.length?c.evidence.map(x=>`<span>${escapeHtml(x)}</span>`).join(""):'<span>取得データ待ち</span>'}</div><div class="ai-grid"><div><b>短期</b><span>${escapeHtml(c.short)}</span></div><div><b>基本</b><span>${escapeHtml(c.base)}</span></div><div><b>強気</b><span>${escapeHtml(c.bull)}</span></div><div><b>弱気</b><span>${escapeHtml(c.bear)}</span></div><div><b>変更条件</b><span>${escapeHtml(c.change)}</span></div></div></div></section>
-    <section class="detail-section"><h3>最新ニュース</h3>${s.news?.length?`<div class="news-box">${s.news.slice(0,5).map(n=>`<a class="news-item" href="${escapeHtml(safeNewsUrl(n.url))}" target="_blank" rel="noopener noreferrer"><div><span class="impact ${safeNewsImpact(n.impact)}">${n.impact==="positive"?"好材料":n.impact==="negative"?"悪材料":"中立"}</span><small>${escapeHtml(n.publisher||"News")}</small></div><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.reason)}</p></a>`).join("")}</div>`:'<p class="muted">ニュースデータ待ち</p>'}</section>`;
+    <section class="detail-section"><h3>最新ニュース</h3>${newsItems.length?`<div class="news-box">${newsItems.slice(0,5).map(n=>`<a class="news-item" href="${escapeHtml(safeNewsUrl(n.url))}" target="_blank" rel="noopener noreferrer"><div><span class="impact ${safeNewsImpact(n.impact)}">${n.impact==="positive"?"好材料":n.impact==="negative"?"悪材料":"中立"}</span><small>${escapeHtml(n.publisher||"News")}</small></div><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.reason)}</p></a>`).join("")}</div>`:'<p class="muted">ニュースデータ待ち</p>'}</section>`;
   showAnalytics(s);
   $("#homeView").hidden=true;$("#detailView").hidden=false;window.scrollTo(0,0);
   // Existing holdings can contain pre-upgrade fundamentals in localStorage.
@@ -330,7 +334,7 @@ async function refreshOne(s){
     }catch(e){}})(),
     (async()=>{try{
       const nr=await fetchTimeout(`/api/news?symbol=${encodeURIComponent(s.symbol)}`);
-      if(nr.ok){const nd=await nr.json();s.news=nd.items||[]}
+      if(nr.ok){const nd=await nr.json();if(Array.isArray(nd?.items))s.news=usableNewsItems(nd.items)}
     }catch(e){}})()
   ]);
   s.updatedAt=Date.now();

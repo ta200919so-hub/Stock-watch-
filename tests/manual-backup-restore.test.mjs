@@ -79,7 +79,7 @@ test("recovery button and PWA asset revisions stay linked",()=>{
  const sw=readFileSync(new URL("../sw.js",import.meta.url),"utf8");
  assert.match(html,/id="restoreBackup"/);
  assert.match(source,/restorePortfolioBackup\(\)/);
- assert.match(sw,/stock-watch-ai-v4-45/);
+ assert.match(sw,/const CACHE="stock-watch-ai-v\\d+-\\d+";/);
  assert.match(html,/app\.js\?v=4\.40/);
  assert.match(sw,/app\.js\?v=4\.40/);
 });

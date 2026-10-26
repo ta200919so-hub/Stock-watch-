@@ -46,10 +46,14 @@ function currencyInfoOf(entries){
  const codes=new Set();
  for(const entry of Array.isArray(entries)?entries:[]){
   if(n(entry?.reportedValue)===null)continue;
-  const code=entry?.currencyCode??entry?.currency??entry?.reportedValue?.currencyCode;
-  if(code==null||code==="")continue;
-  if(typeof code!=="string"||!/^[A-Z]{3}$/.test(code))return {currency:null,conflict:true};
-  codes.add(code);
+  // Validate every supplied currency field, including nested metadata.
+  // Conflicting fields on one observation must not be silently preferred.
+  const explicit=[entry?.currencyCode,entry?.currency,entry?.reportedValue?.currencyCode]
+   .filter(code=>code!=null&&code!=="");
+  for(const code of explicit){
+   if(typeof code!=="string"||!/^[A-Z]{3}$/.test(code))return {currency:null,conflict:true};
+   codes.add(code);
+  }
  }
  return {currency:codes.size===1?[...codes][0]:null,conflict:codes.size>1};
 }
@@ -105,8 +109,11 @@ export default async function handler(req,res){
     const conversion=await currencyToJPY(reportingCurrency);
     if(conversion){
      out.quarterFxRateJPY=conversion.rate;out.quarterFxDate=conversion.date;
-     if(out.quarterRevenue!==null&&(!qrCurrency||qrCurrency===reportingCurrency))out.quarterRevenueJPY=out.quarterRevenue*conversion.rate;
-     if(out.quarterOperatingIncome!==null&&(!qoCurrency||qoCurrency===reportingCurrency))out.quarterOperatingIncomeJPY=out.quarterOperatingIncome*conversion.rate;
+     // If only one series declares a currency, do not assume the other
+     // unlabeled series uses it. Fallback is allowed only when both are unlabeled.
+     const bothUnlabeled=qrCurrency===null&&qoCurrency===null;
+     if(out.quarterRevenue!==null&&(qrCurrency===reportingCurrency||bothUnlabeled))out.quarterRevenueJPY=out.quarterRevenue*conversion.rate;
+     if(out.quarterOperatingIncome!==null&&(qoCurrency===reportingCurrency||bothUnlabeled))out.quarterOperatingIncomeJPY=out.quarterOperatingIncome*conversion.rate;
     }
    }
    if(Object.values(out).some(v=>v!=null&&!Array.isArray(v)))out.source.push("Yahoo fundamentals timeseries");

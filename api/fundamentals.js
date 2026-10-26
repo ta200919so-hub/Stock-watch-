@@ -2,7 +2,22 @@ async function getJson(url){const r=await fetch(url,{headers:{"User-Agent":"Mozi
 const n=v=>{if(v==null||v==="")return null;const x=Number(v?.raw??v);return Number.isFinite(x)?x:null};
 async function chart(symbol,range="1y"){const j=await getJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${range}`);return j?.chart?.result?.[0]||null}
 async function timeseries(symbol,types){const now=Math.floor(Date.now()/1000),start=now-86400*900;const j=await getJson(`https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(symbol)}?symbol=${encodeURIComponent(symbol)}&type=${types.join(",")}&period1=${start}&period2=${now}`);return j?.timeseries?.result||[]}
-const latest=(rows,type)=>{const r=rows.find(x=>x.meta?.type?.[0]===type||x[type]);const a=r?.[type];return Array.isArray(a)&&a.length?n(a[a.length-1]?.reportedValue):null};
+const datedFinancial=e=>typeof e?.asOfDate==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(e.asOfDate);
+function financialEntries(entries){
+ const valid=(Array.isArray(entries)?entries:[]).filter(e=>n(e?.reportedValue)!==null);
+ const dated=valid.filter(datedFinancial);
+ return dated.length?dated.sort((a,b)=>a.asOfDate.localeCompare(b.asOfDate)):valid;
+}
+function priorAnnual(entries){
+ const current=entries[entries.length-1];if(!current)return null;
+ if(!datedFinancial(current))return entries[entries.length-2]||null;
+ const now=Date.parse(current.asOfDate);
+ return [...entries.slice(0,-1)].reverse().find(e=>{
+  const days=(now-Date.parse(e.asOfDate))/86400000;
+  return days>=330&&days<=400;
+ })||null;
+}
+const latest=(rows,type)=>{const r=rows.find(x=>x.meta?.type?.[0]===type||x[type]);const a=financialEntries(r?.[type]);return a.length?n(a[a.length-1]?.reportedValue):null};
 // Yahoo quarterly entries may be unsorted or omit intermediate quarters.
 // Compare dated observations approximately one year apart, not array positions.
 function quarterSnapshot(entries){
@@ -51,9 +66,18 @@ export default async function handler(req,res){
  let out={trailingPE:null,forwardPE:null,marketCap:null,profitMargin:null,revenueGrowth:null,earningsGrowth:null,recommendationKey:null,targetMeanPrice:null,targetMeanPriceJPY:null,nextEarningsDate:null,quarterRevenue:null,quarterRevenueGrowth:null,quarterOperatingIncome:null,quarterOperatingIncomeGrowth:null,quarterRevenueJPY:null,quarterOperatingIncomeJPY:null,quarterFinancialCurrency:null,quarterFxRateJPY:null,quarterFxDate:null,earningsSurprisePct:null,source:[]};
  try{const rows=await timeseries(symbol,["trailingPeRatio","forwardPeRatio","trailingMarketCap","annualTotalRevenue","annualNetIncomeContinuousOperations","annualDilutedEPS","quarterlyTotalRevenue","quarterlyOperatingIncome"]);
    out.trailingPE=latest(rows,"trailingPeRatio");out.forwardPE=latest(rows,"forwardPeRatio");out.marketCap=latest(rows,"trailingMarketCap");
-   const rev=rows.find(x=>x.annualTotalRevenue)?.annualTotalRevenue||[],ni=rows.find(x=>x.annualNetIncomeContinuousOperations)?.annualNetIncomeContinuousOperations||[];
-   if(rev.length){const a=n(rev[rev.length-1]?.reportedValue),b=n(rev[rev.length-2]?.reportedValue);if(a!=null&&b)out.revenueGrowth=a/b-1;const income=n(ni[ni.length-1]?.reportedValue);if(a&&income!=null)out.profitMargin=income/a}
-   const eps=rows.find(x=>x.annualDilutedEPS)?.annualDilutedEPS||[];if(eps.length>1){const a=n(eps[eps.length-1]?.reportedValue),b=n(eps[eps.length-2]?.reportedValue);if(a!=null&&b)out.earningsGrowth=a/b-1}
+   const rev=financialEntries(rows.find(x=>x.annualTotalRevenue)?.annualTotalRevenue),ni=financialEntries(rows.find(x=>x.annualNetIncomeContinuousOperations)?.annualNetIncomeContinuousOperations);
+   if(rev.length){
+    const current=rev[rev.length-1],previous=priorAnnual(rev);
+    const a=n(current?.reportedValue),b=n(previous?.reportedValue);
+    if(a!=null&&b)out.revenueGrowth=a/b-1;
+    // Do not mix revenue and net income from different fiscal years.
+    const matchingIncome=datedFinancial(current)?ni.findLast(e=>e.asOfDate===current.asOfDate):ni[ni.length-1];
+    const income=n(matchingIncome?.reportedValue);
+    if(a&&income!=null)out.profitMargin=income/a;
+   }
+   const eps=financialEntries(rows.find(x=>x.annualDilutedEPS)?.annualDilutedEPS);
+   if(eps.length>1){const a=n(eps[eps.length-1]?.reportedValue),b=n(priorAnnual(eps)?.reportedValue);if(a!=null&&b)out.earningsGrowth=a/b-1}
    const qr=rows.find(x=>x.quarterlyTotalRevenue)?.quarterlyTotalRevenue||[],qo=rows.find(x=>x.quarterlyOperatingIncome)?.quarterlyOperatingIncome||[];
    const revenue=quarterSnapshot(qr),operating=quarterSnapshot(qo);
    out.quarterRevenue=revenue.value;out.quarterRevenueGrowth=revenue.growth;

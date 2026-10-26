@@ -18,12 +18,25 @@ function priorAnnual(entries){
  })||null;
 }
 const latest=(rows,type)=>{const r=rows.find(x=>x.meta?.type?.[0]===type||x[type]);const a=financialEntries(r?.[type]);return a.length?n(a[a.length-1]?.reportedValue):null};
+// Compare YoY values only when the two quarters have compatible reporting
+// currencies; mixed units must not produce a misleading growth percentage.
+function entryCurrencyInfo(entry){
+ const codes=new Set();
+ const explicit=[entry?.currencyCode,entry?.currency,entry?.reportedValue?.currencyCode]
+  .filter(code=>code!=null&&code!=="");
+ for(const code of explicit){
+  if(typeof code!=="string"||!/^[A-Z]{3}$/.test(code))return {currency:null,conflict:true};
+  codes.add(code);
+ }
+ return {currency:codes.size===1?[...codes][0]:null,conflict:codes.size>1};
+}
 // Yahoo quarterly entries may be unsorted or omit intermediate quarters.
 // Compare dated observations approximately one year apart, not array positions.
 function quarterSnapshot(entries){
  const valid=(Array.isArray(entries)?entries:[]).map(entry=>({
   date:typeof entry?.asOfDate==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(entry.asOfDate)?entry.asOfDate:null,
-  value:n(entry?.reportedValue)
+  value:n(entry?.reportedValue),
+  currencyInfo:entryCurrencyInfo(entry)
  })).filter(x=>x.value!==null);
  const dated=valid.some(x=>x.date!==null);
  const ordered=dated?valid.filter(x=>x.date!==null).sort((a,b)=>a.date.localeCompare(b.date)):valid;
@@ -37,10 +50,33 @@ function quarterSnapshot(entries){
    return days>=330&&days<=400;
   })||null;
  }else if(ordered.length>=5)previous=ordered[ordered.length-5];
- return {value:current.value,growth:previous?.value?current.value/previous.value-1:null};
+ const comparable=previous&&!current.currencyInfo.conflict&&!previous.currencyInfo.conflict&&
+  current.currencyInfo.currency===previous.currencyInfo.currency;
+ return {value:current.value,growth:comparable&&previous.value?current.value/previous.value-1:null};
 }
 async function fxJPY(){try{const meta=(await chart("JPY=X","5d"))?.meta;const rate=n(meta?.regularMarketPrice);return meta?.currency==="JPY"&&rate!==null&&rate>0?rate:null}catch{return null}}
-const currencyOf=(entries)=>{for(const x of entries){const c=x?.currencyCode||x?.currency||x?.reportedValue?.currencyCode;if(typeof c==="string"&&/^[A-Z]{3}$/.test(c))return c}return null};
+// A single quarterly series must not mix currencies: choosing the first
+// currency would convert the latest observation with an unrelated FX rate.
+function currencyInfoOf(entries){
+ const codes=new Set();
+ for(const entry of Array.isArray(entries)?entries:[]){
+  if(n(entry?.reportedValue)===null)continue;
+  // Validate all explicit currency fields, including nested metadata.
+  const info=entryCurrencyInfo(entry);
+  if(info.conflict)return {currency:null,conflict:true};
+  if(info.currency)codes.add(info.currency);
+ }
+ // The conversion applies to the selected latest quarter, not a prior one.
+ // An unlabeled latest value cannot safely inherit a historical currency.
+ const ordered=financialEntries(entries);
+ const current=ordered[ordered.length-1];
+ if(current&&codes.size){
+  const latestCodes=[current?.currencyCode,current?.currency,current?.reportedValue?.currencyCode]
+   .filter(code=>code!=null&&code!=="");
+  if(!latestCodes.length)return {currency:null,conflict:true};
+ }
+ return {currency:codes.size===1?[...codes][0]:null,conflict:codes.size>1};
+}
 // ASML reports in EUR even when its NASDAQ-listed shares trade in USD.
 // Yahoo's fundamentals timeseries can omit the reporting-currency metadata.
 const knownReportingCurrencies={"ASML":"EUR","ASML.AS":"EUR"};
@@ -82,18 +118,25 @@ export default async function handler(req,res){
    const revenue=quarterSnapshot(qr),operating=quarterSnapshot(qo);
    out.quarterRevenue=revenue.value;out.quarterRevenueGrowth=revenue.growth;
    out.quarterOperatingIncome=operating.value;out.quarterOperatingIncomeGrowth=operating.growth;
-   const qrCurrency=currencyOf(qr),qoCurrency=currencyOf(qo);
-   // The stock's trading currency is not necessarily its financial reporting currency.
-   // Never silently treat EUR/USD reports as JPY or use a fabricated FX rate.
-   if(qrCurrency&&qoCurrency&&qrCurrency!==qoCurrency){out.quarterFinancialCurrency=null}
-   else{
-    const reportingCurrency=qrCurrency||qoCurrency||reportingCurrencyFor(symbol,market);
-    out.quarterFinancialCurrency=reportingCurrency;
-    const conversion=await currencyToJPY(reportingCurrency);
-    if(conversion){
-     out.quarterFxRateJPY=conversion.rate;out.quarterFxDate=conversion.date;
-     if(out.quarterRevenue!==null&&(!qrCurrency||qrCurrency===reportingCurrency))out.quarterRevenueJPY=out.quarterRevenue*conversion.rate;
-     if(out.quarterOperatingIncome!==null&&(!qoCurrency||qoCurrency===reportingCurrency))out.quarterOperatingIncomeJPY=out.quarterOperatingIncome*conversion.rate;
+   // Do not infer reporting currency or FX when no quarterly observations exist.
+   if(out.quarterRevenue!==null||out.quarterOperatingIncome!==null){
+    const qrInfo=currencyInfoOf(qr),qoInfo=currencyInfoOf(qo);
+    const qrCurrency=qrInfo.currency,qoCurrency=qoInfo.currency;
+    // The stock's trading currency is not necessarily its financial reporting currency.
+    // Never silently treat EUR/USD reports as JPY or use a fabricated FX rate.
+    if(qrInfo.conflict||qoInfo.conflict||(qrCurrency&&qoCurrency&&qrCurrency!==qoCurrency)){out.quarterFinancialCurrency=null}
+    else{
+     const reportingCurrency=qrCurrency||qoCurrency||reportingCurrencyFor(symbol,market);
+     out.quarterFinancialCurrency=reportingCurrency;
+     const conversion=await currencyToJPY(reportingCurrency);
+     if(conversion){
+      out.quarterFxRateJPY=conversion.rate;out.quarterFxDate=conversion.date;
+      // If only one series declares a currency, do not assume the other
+      // unlabeled series uses it. Fallback is allowed only when both are unlabeled.
+      const bothUnlabeled=qrCurrency===null&&qoCurrency===null;
+      if(out.quarterRevenue!==null&&(qrCurrency===reportingCurrency||bothUnlabeled))out.quarterRevenueJPY=out.quarterRevenue*conversion.rate;
+      if(out.quarterOperatingIncome!==null&&(qoCurrency===reportingCurrency||bothUnlabeled))out.quarterOperatingIncomeJPY=out.quarterOperatingIncome*conversion.rate;
+     }
     }
    }
    if(Object.values(out).some(v=>v!=null&&!Array.isArray(v)))out.source.push("Yahoo fundamentals timeseries");

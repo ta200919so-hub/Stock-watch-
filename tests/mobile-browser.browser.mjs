@@ -198,6 +198,34 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         await page.screenshot({path:resolve(screenshots,"search-390.png")});
       }finally{await context.close()}
     });
+    await t.test("search distinguishes partial outages from no matching stocks",async()=>{
+      const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:"block"});
+      try{
+        const page=await context.newPage();
+        await page.route("**/api/search?*",route=>{
+          const url=new URL(route.request().url());
+          const market=url.searchParams.get("market"),query=url.searchParams.get("q");
+          if(query==="部分障害"&&market==="JP")
+            return route.fulfill({json:{results:[{symbol:"7203.T",name:"トヨタ自動車"}]}});
+          return route.fulfill({status:503,body:"market unavailable"});
+        });
+        await page.goto(base);
+        await page.locator("#openSearch").click();
+        await page.locator("#globalSearch").fill("部分障害");
+        await page.locator('.global-result[data-symbol="7203.T"]').waitFor({timeout:10000});
+        await page.waitForFunction(()=>document.querySelector("#globalSuggestions")?.textContent?.includes("一部の市場を検索できませんでした"));
+        assert.equal(await page.locator(".global-result").count(),1,
+          "available-market results must remain visible despite the other market failing");
+        assert.doesNotMatch(await page.locator("#globalSuggestions").innerText(),/候補が見つかりません/);
+        await page.locator("#globalSearch").fill("全市場障害");
+        await page.waitForFunction(()=>document.querySelector("#globalSuggestions")?.textContent?.includes("日本株・米国株の検索に失敗しました"));
+        assert.equal(await page.locator(".global-result").count(),0,
+          "results from an earlier query must not survive a total outage");
+        assert.doesNotMatch(await page.locator("#globalSuggestions").innerText(),/候補が見つかりません/);
+        assert.equal(await page.evaluate(()=>localStorage.getItem("stock-watch-ai-v1")),null,
+          "search failures must not create or overwrite portfolio data");
+      }finally{await context.close()}
+    });
     await t.test("yen financial refresh preserves the selected chart and portfolio",async()=>{
       const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:"block"});
       let releaseFinance;

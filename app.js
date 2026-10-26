@@ -58,7 +58,7 @@ function readStocks(){
   return partial||[];
 }
 let stocks=readStocks();
-function save(){
+function save({preserveBackup=false}={}){
   let oldBackup=null,backupUpdated=false;
   try{
     const previous=localStorage.getItem(KEY);
@@ -83,8 +83,17 @@ function save(){
       }
       if(Array.isArray(prior)&&prior.length>0&&prior.every(validStoredHolding)){
         oldBackup=localStorage.getItem(BACKUP_KEY);
-        localStorage.setItem(BACKUP_KEY,previous);
-        backupUpdated=true;
+        // Background quote refreshes must not erase the last recovery point
+        // for an actual holding edit. Seed or repair a missing/corrupt backup.
+        let healthyBackup=false;
+        try{
+          const parsedBackup=JSON.parse(oldBackup);
+          healthyBackup=Array.isArray(parsedBackup)&&parsedBackup.length>0&&parsedBackup.every(validStoredHolding);
+        }catch{}
+        if(!preserveBackup||!healthyBackup){
+          localStorage.setItem(BACKUP_KEY,previous);
+          backupUpdated=true;
+        }
       }
     }
     const serialized=JSON.stringify(stocks);
@@ -367,7 +376,7 @@ async function refreshAll(){
     }
     if(!ok){render();status("株価を取得できませんでした。もう一度お試しください。","error");return}
     stocks=refreshed;
-    const saved=save();
+    const saved=save({preserveBackup:true});
     if(!saved)stocks=originalStocks;
     else portfolioRevision++;
     render();

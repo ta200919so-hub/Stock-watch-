@@ -42,9 +42,26 @@ test("valid metrics and intentionally empty news are accepted",async()=>{
   assert.equal(s.fundamentals.trailingPE,19);
   assert.equal(s.news.length,0);
 });
-test("legitimate unavailable fundamentals response is accepted",async()=>{
-  const s=holding();
-  await run(s,{fundamentals:{unavailable:true,source:[]},news:{items:[{title:"Fresh"}]}});
-  assert.equal(s.fundamentals.unavailable,true);
+test("HTTP 200 upstream unavailable responses preserve saved metrics and news",async()=>{
+  const s=holding(),oldFundamentals=s.fundamentals,oldNews=s.news;
+  await run(s,{fundamentals:{unavailable:true,source:[]},news:{items:[],unavailable:true}});
+  assert.equal(s.currentPriceJPY,120,"valid quote still refreshes");
+  assert.equal(s.fundamentals,oldFundamentals);
+  assert.equal(s.news,oldNews);
+});
+test("empty source and unavailable false do not validate an empty fundamentals response",async()=>{
+  const s=holding(),oldFundamentals=s.fundamentals;
+  await run(s,{fundamentals:{unavailable:false,source:[]},news:{items:[{title:"Fresh"}]}});
+  assert.equal(s.fundamentals,oldFundamentals);
   assert.equal(s.news[0].title,"Fresh");
+});
+test("unavailable fundamentals can initialize an empty holding without erasing existing analysis",async()=>{
+  const s=holding();s.fundamentals=null;
+  await run(s,{fundamentals:{unavailable:true,source:[]},news:{items:[]}});
+  assert.equal(s.fundamentals.unavailable,true);
+});
+test("valid fundamentals from a different numeric field still refresh",async()=>{
+  const s=holding();
+  await run(s,{fundamentals:{marketCap:1000000,unavailable:false},news:{items:[]}});
+  assert.equal(s.fundamentals.marketCap,1000000);
 });

@@ -111,5 +111,5 @@ test("normal holding edits still rotate the recovery snapshot after price-only r
 });
 
 test("refreshAll uses price-only persistence instead of rotating the backup",()=>{
- assert.match(source,/const saved=save\(\\{preserveBackup:true\}\)/);
+ assert.match(source,/const saved=save\(\{preserveBackup:true\}\)/);
 });

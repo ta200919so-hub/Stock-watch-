@@ -18,12 +18,25 @@ function priorAnnual(entries){
  })||null;
 }
 const latest=(rows,type)=>{const r=rows.find(x=>x.meta?.type?.[0]===type||x[type]);const a=financialEntries(r?.[type]);return a.length?n(a[a.length-1]?.reportedValue):null};
+// Compare YoY values only when the two quarters have compatible reporting
+// currencies; mixed units must not produce a misleading growth percentage.
+function entryCurrencyInfo(entry){
+ const codes=new Set();
+ const explicit=[entry?.currencyCode,entry?.currency,entry?.reportedValue?.currencyCode]
+  .filter(code=>code!=null&&code!=="");
+ for(const code of explicit){
+  if(typeof code!=="string"||!/^[A-Z]{3}$/.test(code))return {currency:null,conflict:true};
+  codes.add(code);
+ }
+ return {currency:codes.size===1?[...codes][0]:null,conflict:codes.size>1};
+}
 // Yahoo quarterly entries may be unsorted or omit intermediate quarters.
 // Compare dated observations approximately one year apart, not array positions.
 function quarterSnapshot(entries){
  const valid=(Array.isArray(entries)?entries:[]).map(entry=>({
   date:typeof entry?.asOfDate==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(entry.asOfDate)?entry.asOfDate:null,
-  value:n(entry?.reportedValue)
+  value:n(entry?.reportedValue),
+  currencyInfo:entryCurrencyInfo(entry)
  })).filter(x=>x.value!==null);
  const dated=valid.some(x=>x.date!==null);
  const ordered=dated?valid.filter(x=>x.date!==null).sort((a,b)=>a.date.localeCompare(b.date)):valid;
@@ -37,7 +50,9 @@ function quarterSnapshot(entries){
    return days>=330&&days<=400;
   })||null;
  }else if(ordered.length>=5)previous=ordered[ordered.length-5];
- return {value:current.value,growth:previous?.value?current.value/previous.value-1:null};
+ const comparable=previous&&!current.currencyInfo.conflict&&!previous.currencyInfo.conflict&&
+  current.currencyInfo.currency===previous.currencyInfo.currency;
+ return {value:current.value,growth:comparable&&previous.value?current.value/previous.value-1:null};
 }
 async function fxJPY(){try{const meta=(await chart("JPY=X","5d"))?.meta;const rate=n(meta?.regularMarketPrice);return meta?.currency==="JPY"&&rate!==null&&rate>0?rate:null}catch{return null}}
 // A single quarterly series must not mix currencies: choosing the first
@@ -46,14 +61,10 @@ function currencyInfoOf(entries){
  const codes=new Set();
  for(const entry of Array.isArray(entries)?entries:[]){
   if(n(entry?.reportedValue)===null)continue;
-  // Validate every supplied currency field, including nested metadata.
-  // Conflicting fields on one observation must not be silently preferred.
-  const explicit=[entry?.currencyCode,entry?.currency,entry?.reportedValue?.currencyCode]
-   .filter(code=>code!=null&&code!=="");
-  for(const code of explicit){
-   if(typeof code!=="string"||!/^[A-Z]{3}$/.test(code))return {currency:null,conflict:true};
-   codes.add(code);
-  }
+  // Validate all explicit currency fields, including nested metadata.
+  const info=entryCurrencyInfo(entry);
+  if(info.conflict)return {currency:null,conflict:true};
+  if(info.currency)codes.add(info.currency);
  }
  // The conversion applies to the selected latest quarter, not a prior one.
  // An unlabeled latest value cannot safely inherit a historical currency.

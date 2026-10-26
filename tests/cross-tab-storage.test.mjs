@@ -66,3 +66,50 @@ test("a restored backup can be saved when primary has not changed",()=>{
  assert.equal(api.save(),true);
  assert.equal(JSON.parse(store.get(KEY)).length,2);
 });
+
+test("automatic quote refresh preserves an existing healthy recovery snapshot",()=>{
+ const {store,alerts,api}=setup([holding("AAPL")]);
+ const recovery=JSON.stringify([holding("AMAT"),holding("NVDA")]);
+ store.set(BACKUP,recovery);
+ api.setStocks([{...holding("AAPL"),currentPriceJPY:250}]);
+ assert.equal(api.save({preserveBackup:true}),true);
+ assert.equal(JSON.parse(store.get(KEY))[0].currentPriceJPY,250);
+ assert.equal(store.get(BACKUP),recovery,"background refresh must not replace a recoverable holdings snapshot");
+ assert.equal(alerts.length,0);
+});
+
+test("automatic quote refresh seeds a missing backup without losing holdings",()=>{
+ const {store,api}=setup([holding("AAPL")]);
+ api.setStocks([{...holding("AAPL"),currentPriceJPY:250}]);
+ assert.equal(api.save({preserveBackup:true}),true);
+ assert.equal(JSON.parse(store.get(KEY))[0].currentPriceJPY,250);
+ assert.equal(JSON.parse(store.get(BACKUP))[0].currentPriceJPY,110);
+});
+
+test("automatic quote refresh repairs corrupt backup but never overwrites stale primary",()=>{
+ const {store,api}=setup([holding("AAPL")]);
+ store.set(BACKUP,"{corrupt");
+ api.setStocks([{...holding("AAPL"),currentPriceJPY:250}]);
+ assert.equal(api.save({preserveBackup:true}),true);
+ assert.equal(JSON.parse(store.get(BACKUP))[0].symbol,"AAPL");
+ const previous=store.get(BACKUP);
+ store.set(KEY,JSON.stringify([holding("MSFT")]));
+ api.setStocks([holding("TSLA")]);
+ assert.equal(api.save({preserveBackup:true}),false);
+ assert.equal(JSON.parse(store.get(KEY))[0].symbol,"MSFT");
+ assert.equal(store.get(BACKUP),previous);
+});
+
+test("normal holding edits still rotate the recovery snapshot after price-only refresh",()=>{
+ const {store,api}=setup([holding("AAPL")]);
+ store.set(BACKUP,JSON.stringify([holding("AMAT")]));
+ api.setStocks([{...holding("AAPL"),currentPriceJPY:200}]);
+ assert.equal(api.save({preserveBackup:true}),true);
+ api.setStocks([holding("AAPL"),holding("MSFT")]);
+ assert.equal(api.save(),true);
+ assert.equal(JSON.parse(store.get(BACKUP))[0].currentPriceJPY,200);
+});
+
+test("refreshAll uses price-only persistence instead of rotating the backup",()=>{
+ assert.match(source,/const saved=save\(\\{preserveBackup:true\}\)/);
+});

@@ -45,3 +45,16 @@ test("legitimate HTTPS news links and escaped text remain available",()=>{
   assert.match(html,/class="impact positive"/);
   assert.match(html,/A &lt; B/);
 });
+
+test("malformed saved news entries cannot crash stock detail or rewrite holdings",()=>{
+  const news=[null,42,"unexpected",{url:"https://example.com/valid",impact:"neutral",title:"Valid",reason:"OK"}];
+  const {html,map,original}=boot(news);
+  assert.match(html,/Valid/);
+  assert.equal((html.match(/class="news-item"/g)||[]).length,1);
+  assert.equal(map.get(KEY),original,"malformed news must not mutate saved holdings");
+});
+test("non-array legacy news falls back to a safe empty state",()=>{
+  const {html,map,original}=boot("corrupted news payload");
+  assert.match(html,/ニュースデータ待ち/);
+  assert.equal(map.get(KEY),original);
+});

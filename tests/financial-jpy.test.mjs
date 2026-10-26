@@ -4,9 +4,9 @@ import {readFileSync} from "node:fs";
 import vm from "node:vm";
 
 const source=readFileSync(new URL("../api/fundamentals.js",import.meta.url),"utf8");
-function run({currency="EUR",fx=180,market="US",currencyMissing=false,symbol="ASML",fallbackFx=null,targetPrice=null,fxQuoteCurrency="JPY"}={}){
+function run({currency="EUR",fx=180,market="US",currencyMissing=false,symbol="ASML",fallbackFx=null,targetPrice=null,fxQuoteCurrency="JPY",quarterlyMissing=false}={}){
  const requests=[];
- const series=["quarterlyTotalRevenue","quarterlyOperatingIncome"].map((type,i)=>({
+ const series=(quarterlyMissing?[]:["quarterlyTotalRevenue","quarterlyOperatingIncome"]).map((type,i)=>({
   meta:{type:[type]},
   [type]:[{currencyCode:currencyMissing?undefined:currency,reportedValue:{raw:i?5173000000:11662000000}}]
  }));
@@ -110,4 +110,22 @@ test("financial FX falls back to an independently quoted JPY rate on currency mi
  assert.equal(body.quarterRevenueJPY,11662000000*182.5);
  assert.equal(body.quarterOperatingIncomeJPY,5173000000*182.5);
  assert.ok(requests.some(x=>x.includes("api.frankfurter.dev")));
+});
+
+// The client must not discard quarterly metrics just because valuation endpoints failed.
+test("quarterly-only fundamentals are available for portfolio refresh",async()=>{
+ const {body}=await run();
+ assert.equal(body.trailingPE,null);
+ assert.equal(body.unavailable,false);
+ assert.ok(body.quarterRevenueJPY>0);
+});
+test("quarterly raw figures stay available when currency conversion is unavailable",async()=>{
+ const {body}=await run({currencyMissing:true,symbol:"MSFT"});
+ assert.equal(body.quarterRevenueJPY,null);
+ assert.equal(body.unavailable,false);
+ assert.ok(body.quarterRevenue>0);
+});
+test("empty upstream metrics still report unavailable",async()=>{
+ const {body}=await run({quarterlyMissing:true,fx:null,symbol:"MSFT"});
+ assert.equal(body.unavailable,true);
 });

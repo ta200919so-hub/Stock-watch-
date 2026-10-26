@@ -152,6 +152,23 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
           "the previous valid portfolio must remain recoverable");
       }finally{releaseQuotes();await context.close()}
     });
+    await t.test("long Japanese detail heading and yen quote do not overlap at 320px",async()=>{
+      const context=await browser.newContext({viewport:{width:320,height:844},isMobile:true,hasTouch:true});
+      try{
+        const page=await context.newPage();
+        await page.addInitScript(data=>localStorage.setItem("stock-watch-ai-v1",JSON.stringify(data)),[sample[0]]);
+        await page.goto(base);
+        await page.locator('[data-detail="0"]').click();
+        const bounds=await page.evaluate(()=>{
+          const rect=id=>{const r=document.querySelector(id).getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom}};
+          return {back:rect("#backHome"),title:rect("#detailTitle"),price:rect("#detailPrice"),width:window.innerWidth};
+        });
+        assert.ok(bounds.back.right+4<=bounds.title.left,`back/title overlap: ${JSON.stringify(bounds)}`);
+        assert.ok(bounds.title.right+4<=bounds.price.left,`title/price overlap: ${JSON.stringify(bounds)}`);
+        assert.ok(bounds.price.right<=bounds.width-8,`quote clips viewport: ${JSON.stringify(bounds)}`);
+        await page.screenshot({path:resolve(screenshots,"detail-header-320.png")});
+      }finally{await context.close()}
+    });
     await t.test("chart ticks and Japanese stock search render",async()=>{
       const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
       try{

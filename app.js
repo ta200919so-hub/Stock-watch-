@@ -463,25 +463,28 @@ async function globalSearch(){
  if(!q){box.innerHTML="";return}
  // Show whichever market answers first; do not wait for the slower API.
  // Keep already displayed results in arrival order to avoid moving tap targets.
- const results=[];let settled=0;
+ const results=[];let settled=0,failed=0;
  const isCurrent=()=>requestId===globalSearchRequestId&&q===input.value.trim()&&!$("#searchView").hidden;
  const renderResults=()=>{
   if(!isCurrent())return;
   const seen=new Set();
   const all=results.filter(x=>x&&typeof x.symbol==="string"&&x.symbol.trim()&&typeof x.name==="string"&&!seen.has(x.symbol)&&(seen.add(x.symbol),true)).slice(0,10);
   const loading=settled<2;
+  // An unavailable market is not the same as a confirmed empty result.
+  const error=failed===2?"日本株・米国株の検索に失敗しました。通信状態を確認して再入力してください。":
+    failed?"一部の市場を検索できませんでした。表示中の候補は取得できた市場のみです。":"";
   box.innerHTML=(all.length?all.map(x=>`<button type="button" class="suggestion global-result" data-symbol="${escapeHtml(x.symbol)}" data-name="${escapeHtml(x.name)}" data-market="${x.market}"><strong>${escapeHtml(x.name)}</strong><span>${x.market==="JP"?"🇯🇵 日本株":"🇺🇸 米国株"} · ${escapeHtml(x.symbol)}</span></button>`).join(""):"")+
-   (loading?'<div class="no-result">他の市場も検索中…</div>':all.length?"":'<div class="no-result">候補が見つかりません</div>');
+   (loading?'<div class="no-result">他の市場も検索中…</div>':error?`<div class="no-result" role="status">${error}</div>`:all.length?"":'<div class="no-result">候補が見つかりません</div>');
  };
  renderResults();
  await Promise.all(["JP","US"].map(async market=>{
   try{
    const r=await fetchTimeout(`/api/search?q=${encodeURIComponent(q)}&market=${market}`,7000);
-   if(r.ok){
-    const d=await r.json();
-    if(isCurrent()&&Array.isArray(d.results))results.push(...d.results.map(x=>({...x,market})));
-   }
-  }catch{}finally{settled++;renderResults()}
+   if(!r.ok)throw new Error("search_unavailable");
+   const d=await r.json();
+   if(!Array.isArray(d?.results))throw new Error("invalid_search_results");
+   if(isCurrent())results.push(...d.results.map(x=>({...x,market})));
+  }catch{failed++}finally{settled++;renderResults()}
  }));
 }
 async function renderExternalDetail(temp){

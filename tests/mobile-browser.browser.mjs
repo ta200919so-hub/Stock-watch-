@@ -410,6 +410,44 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         assert.equal(await page.locator("#searchView").isHidden(),true);
       }finally{releaseQuote();await context.close()}
     });
+    await t.test("iPhone backup restore requires confirmation and preserves recovery snapshot",async()=>{
+      const context=await browser.newContext({viewport:{width:320,height:740},isMobile:true,hasTouch:true,serviceWorkers:"block"});
+      try{
+        const page=await context.newPage();
+        const primary=[{...sample[0],symbol:"AAPL",name:"Original holding"}];
+        const backup=[{...sample[0],symbol:"AMAT",name:"Recovered holding"}];
+        await page.addInitScript(({primary,backup})=>{
+          localStorage.setItem("stock-watch-ai-v1",JSON.stringify(primary));
+          localStorage.setItem("stock-watch-ai-backup-v1",JSON.stringify(backup));
+        },{primary,backup});
+        // Block automatic quote refresh so this test isolates manual recovery.
+        await page.route("**/api/**",route=>route.fulfill({status:503,body:"Unavailable"}));
+        await page.goto(base);
+        const button=page.locator("#restoreBackup");
+        await button.scrollIntoViewIfNeeded();
+        const rect=await button.boundingBox();
+        assert.ok(rect&&rect.x>=0&&rect.x+rect.width<=320,
+          "restore button must fit a 320px iPhone viewport");
+        const overlap=await page.evaluate(()=>{
+          const restore=document.querySelector("#restoreBackup").getBoundingClientRect();
+          const add=document.querySelector("#openAdd").getBoundingClientRect();
+          return restore.left<add.right&&add.left<restore.right&&restore.top<add.bottom&&add.top<restore.bottom;
+        });
+        assert.equal(overlap,false,"restore button must not be covered by the sticky add action at 320px");
+        const previousBackup=await page.evaluate(()=>localStorage.getItem("stock-watch-ai-backup-v1"));
+        page.once("dialog",dialog=>dialog.dismiss());
+        await button.click();
+        assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem("stock-watch-ai-v1"))[0].symbol),"AAPL",
+          "cancelling must not change the primary portfolio");
+        page.once("dialog",dialog=>dialog.accept());
+        await button.click();
+        assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem("stock-watch-ai-v1"))[0].symbol),"AMAT");
+        assert.equal(await page.evaluate(()=>localStorage.getItem("stock-watch-ai-backup-v1")),previousBackup,
+          "restoring must retain the recoverable backup");
+        assert.match(await page.locator("#status").innerText(),/復元しました/);
+        await page.screenshot({path:resolve(screenshots,"manual-backup-restore-320.png")});
+      }finally{await context.close()}
+    });
     await t.test("corrupt primary recovers backup without modifying stored holdings",async()=>{
       const context=await browser.newContext({viewport:{width:375,height:812},isMobile:true,hasTouch:true});
       try{

@@ -114,6 +114,26 @@ function save({preserveBackup=false}={}){
     return false;
   }
 }
+// Restore is explicit: never replace holdings silently on page load.
+function restorePortfolioBackup(){
+  let recovered;
+  try{
+    const raw=localStorage.getItem(BACKUP_KEY);
+    if(raw===null)return {ok:false,reason:"missing"};
+    const parsed=JSON.parse(raw);
+    if(!Array.isArray(parsed)||!parsed.length||!parsed.every(validStoredHolding))return {ok:false,reason:"invalid"};
+    recovered=parsed.map(migrate);
+  }catch{return {ok:false,reason:"invalid"}}
+  if(!confirm("バックアップから保有銘柄を復元しますか？現在の保有一覧は置き換わります。"))return {ok:false,reason:"cancelled"};
+  const original=stocks;
+  stocks=recovered;
+  // A valid backup must survive the restore itself; save() also rejects
+  // stale tabs and failed primary writes before accepting the new snapshot.
+  if(!save({preserveBackup:true})){stocks=original;return {ok:false,reason:"save_failed"}}
+  portfolioRevision++;
+  return {ok:true,count:stocks.length};
+}
+
 function pnlPct(s){
   if(!s.shares||!s.purchasePriceJPY||!s.currentPriceJPY)return null;
   return (s.currentPriceJPY/s.purchasePriceJPY-1)*100;
@@ -520,6 +540,12 @@ $("#globalSuggestions")?.addEventListener("click",async e=>{
  }
 });
 
+$("#restoreBackup").addEventListener("click",()=>{
+  const result=restorePortfolioBackup();
+  if(result.ok){render();status(`バックアップから${result.count}銘柄を復元しました。`,"ok");return}
+  if(result.reason==="cancelled"||result.reason==="save_failed")return;
+  status(result.reason==="missing"?"復元できるバックアップがありません。":"バックアップが破損しているため復元できません。","error");
+});
 $("#refreshBtn").addEventListener("click",refreshAll);
 
 if("serviceWorker"in navigator){

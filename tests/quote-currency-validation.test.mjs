@@ -65,11 +65,12 @@ test("daily change uses previousClose even when multi-day chart baseline differs
   assert.equal(res.body.previousClose,100);
   assert.ok(Math.abs(res.body.dayChangePct-10)<1e-10);
 });
-test("missing daily close does not mislabel the multi-day baseline as daily change",async()=>{
-  const {res}=await quote({stock:{regularMarketPrice:110,chartPreviousClose:80,currency:"JPY"}});
+test("one-day chart uses chartPreviousClose when previousClose is absent",async()=>{
+  const {res,requested}=await quote({stock:{regularMarketPrice:110,chartPreviousClose:100,currency:"JPY"}});
   assert.equal(res.code,200);
-  assert.equal(res.body.previousClose,null);
-  assert.equal(res.body.dayChangePct,null);
+  assert.equal(res.body.previousClose,100);
+  assert.ok(Math.abs(res.body.dayChangePct-10)<1e-10);
+  assert.ok(requested[0].includes("range=1d"),"daily quote must not use a multi-day baseline");
 });
 test("invalid market or symbol is rejected before an upstream request",async()=>{
   for(const input of [{market:"EUR"},{symbol:"../../foo"},{symbol:""}]){

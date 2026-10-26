@@ -32,25 +32,25 @@ export default async function handler(req, res) {
     }
 
     const data = await r.json();
-
-    let results = (data.quotes || []).filter(
-      (x) => x.quoteType === "EQUITY"
+    // Malformed upstream payloads are failures, not genuine zero-result searches.
+    // Never offer a malformed ticker for saving in the user's portfolio.
+    if (!Array.isArray(data?.quotes)) throw new Error("invalid_search_response");
+    const validSymbol = (symbol) => typeof symbol === "string" &&
+      /^[A-Z0-9.^=-]{1,20}$/.test(symbol) &&
+      (market === "JP" ? /^[A-Z0-9]{4,5}\.T$/.test(symbol) : !symbol.includes("."));
+    const seen = new Set();
+    let results = data.quotes.filter(
+      (x) => x && typeof x === "object" &&
+        x.quoteType === "EQUITY" && validSymbol(x.symbol) &&
+        !seen.has(x.symbol) && Boolean(seen.add(x.symbol))
     );
-
-    if (market === "JP") {
-      results = results.filter(
-        (x) => /\.T$/.test(x.symbol)
-      );
-    } else {
-      results = results.filter(
-        (x) => !/\.[A-Z]{1,4}$/.test(x.symbol)
-      );
-    }
 
     if(knownSymbol&&matchesMarket(knownSymbol)&&!results.some(x=>x.symbol===knownSymbol))results.unshift({symbol:knownSymbol,quoteType:"EQUITY"});
     results = results.slice(0, 8).map((x) => ({
       symbol: x.symbol,
-      name: JA_NAMES[x.symbol] || x.longname || x.shortname || x.symbol
+      name: JA_NAMES[x.symbol] ||
+        (typeof x.longname === "string" && x.longname.trim()) ||
+        (typeof x.shortname === "string" && x.shortname.trim()) || x.symbol
     }));
 
     res.setHeader(

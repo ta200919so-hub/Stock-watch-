@@ -49,3 +49,43 @@ test("consistent EUR quarterly series still converts latest values correctly",as
  assert.equal(body.quarterRevenueJPY,27000);
  assert.equal(body.quarterOperatingIncomeJPY,3600);
 });
+
+test("conflicting currency fields inside one observation block conversion",async()=>{
+ const observation=entry("2026-03-31",150,"EUR");
+ observation.reportedValue.currencyCode="USD";
+ const {body}=await run([observation]);
+ assert.equal(body.quarterRevenue,150);
+ assert.equal(body.quarterFinancialCurrency,null);
+ assert.equal(body.quarterRevenueJPY,null);
+});
+
+test("unlabeled operating income must not inherit revenue's EUR conversion",async()=>{
+ const {body}=await run(
+  [entry("2026-03-31",150,"EUR")],
+  [entry("2026-03-31",20)]
+ );
+ assert.equal(body.quarterFinancialCurrency,"EUR");
+ assert.equal(body.quarterRevenueJPY,27000);
+ assert.equal(body.quarterOperatingIncomeJPY,null);
+});
+
+test("unlabeled revenue must not inherit operating income's EUR conversion",async()=>{
+ const {body}=await run(
+  [entry("2026-03-31",150)],
+  [entry("2026-03-31",20,"EUR")]
+ );
+ assert.equal(body.quarterFinancialCurrency,"EUR");
+ assert.equal(body.quarterRevenueJPY,null);
+ assert.equal(body.quarterOperatingIncomeJPY,3600);
+});
+
+test("fully unlabeled Japanese quarterly series retain JPY market fallback",async()=>{
+ const {body}=await run(
+  [entry("2026-03-31",150)],
+  [entry("2026-03-31",20)]
+ );
+ assert.equal(body.quarterFinancialCurrency,"JPY");
+ assert.equal(body.quarterFxRateJPY,1);
+ assert.equal(body.quarterRevenueJPY,150);
+ assert.equal(body.quarterOperatingIncomeJPY,20);
+});

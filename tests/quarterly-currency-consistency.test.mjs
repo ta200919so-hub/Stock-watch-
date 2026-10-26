@@ -111,3 +111,43 @@ test("latest dated EUR quarter can convert despite an older unlabeled observatio
  assert.equal(body.quarterFinancialCurrency,"EUR");
  assert.equal(body.quarterRevenueJPY,27000);
 });
+
+test("quarterly YoY growth is omitted when the two periods report different currencies",async()=>{
+ const {body}=await run([
+  entry("2025-03-31",100,"USD"),
+  entry("2026-03-31",150,"EUR")
+ ]);
+ assert.equal(body.quarterRevenue,150);
+ assert.equal(body.quarterRevenueGrowth,null);
+});
+
+test("quarterly YoY growth is omitted when only one period has a currency label",async()=>{
+ const {body}=await run([
+  entry("2025-03-31",100),
+  entry("2026-03-31",150,"EUR")
+ ]);
+ assert.equal(body.quarterRevenueGrowth,null);
+});
+
+test("quarterly YoY growth remains valid when both periods have the same currency",async()=>{
+ const {body}=await run([
+  entry("2025-03-31",100,"EUR"),
+  entry("2026-03-31",150,"EUR")
+ ]);
+ assert.equal(body.quarterRevenueGrowth,0.5);
+});
+
+test("quarterly YoY growth remains available when both periods lack currency labels",async()=>{
+ const {body}=await run([
+  entry("2025-03-31",100),
+  entry("2026-03-31",150)
+ ]);
+ assert.equal(body.quarterRevenueGrowth,0.5);
+});
+
+test("quarterly YoY growth is omitted when latest metadata conflicts within an observation",async()=>{
+ const latest=entry("2026-03-31",150,"EUR");
+ latest.reportedValue.currencyCode="USD";
+ const {body}=await run([entry("2025-03-31",100,"EUR"),latest]);
+ assert.equal(body.quarterRevenueGrowth,null);
+});

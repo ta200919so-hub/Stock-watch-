@@ -23,9 +23,14 @@ export default async function handler(req, res) {
     const meta = await chart(symbol);
     const raw = Number(meta?.regularMarketPrice);
     // A one-day chart makes chartPreviousClose a prior-session close.
-    // Prefer previousClose when Yahoo provides both values.
-    const previous = Number(meta?.previousClose || meta?.chartPreviousClose);
-    const prev = Number.isFinite(previous) && previous > 0 ? previous : null;
+    // Prefer previousClose when valid, otherwise try chartPreviousClose.
+    // Truthy invalid values (such as -1 or NaN) must not hide a valid fallback.
+    const validClose = value => {
+      if (value == null || value === "") return null;
+      const number = Number(value);
+      return Number.isFinite(number) && number > 0 ? number : null;
+    };
+    const prev = validClose(meta?.previousClose) ?? validClose(meta?.chartPreviousClose);
     const expectedCurrency = market === "US" ? "USD" : "JPY";
     // A valid price in the wrong currency would silently corrupt yen valuations.
     if (!Number.isFinite(raw) || raw <= 0 || meta?.currency !== expectedCurrency) {

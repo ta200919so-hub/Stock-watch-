@@ -3,6 +3,27 @@ const n=v=>{if(v==null||v==="")return null;const x=Number(v?.raw??v);return Numb
 async function chart(symbol,range="1y"){const j=await getJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${range}`);return j?.chart?.result?.[0]||null}
 async function timeseries(symbol,types){const now=Math.floor(Date.now()/1000),start=now-86400*900;const j=await getJson(`https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(symbol)}?symbol=${encodeURIComponent(symbol)}&type=${types.join(",")}&period1=${start}&period2=${now}`);return j?.timeseries?.result||[]}
 const latest=(rows,type)=>{const r=rows.find(x=>x.meta?.type?.[0]===type||x[type]);const a=r?.[type];return Array.isArray(a)&&a.length?n(a[a.length-1]?.reportedValue):null};
+// Yahoo quarterly entries may be unsorted or omit intermediate quarters.
+// Compare dated observations approximately one year apart, not array positions.
+function quarterSnapshot(entries){
+ const valid=(Array.isArray(entries)?entries:[]).map(entry=>({
+  date:typeof entry?.asOfDate==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(entry.asOfDate)?entry.asOfDate:null,
+  value:n(entry?.reportedValue)
+ })).filter(x=>x.value!==null);
+ const dated=valid.some(x=>x.date!==null);
+ const ordered=dated?valid.filter(x=>x.date!==null).sort((a,b)=>a.date.localeCompare(b.date)):valid;
+ const current=ordered[ordered.length-1];
+ if(!current)return {value:null,growth:null};
+ let previous=null;
+ if(dated){
+  const now=Date.parse(current.date);
+  previous=[...ordered].reverse().find(x=>{
+   const days=(now-Date.parse(x.date))/86400000;
+   return days>=330&&days<=400;
+  })||null;
+ }else if(ordered.length>=5)previous=ordered[ordered.length-5];
+ return {value:current.value,growth:previous?.value?current.value/previous.value-1:null};
+}
 async function fxJPY(){try{const meta=(await chart("JPY=X","5d"))?.meta;const rate=n(meta?.regularMarketPrice);return meta?.currency==="JPY"&&rate!==null&&rate>0?rate:null}catch{return null}}
 const currencyOf=(entries)=>{for(const x of entries){const c=x?.currencyCode||x?.currency||x?.reportedValue?.currencyCode;if(typeof c==="string"&&/^[A-Z]{3}$/.test(c))return c}return null};
 // ASML reports in EUR even when its NASDAQ-listed shares trade in USD.
@@ -33,7 +54,10 @@ export default async function handler(req,res){
    const rev=rows.find(x=>x.annualTotalRevenue)?.annualTotalRevenue||[],ni=rows.find(x=>x.annualNetIncomeContinuousOperations)?.annualNetIncomeContinuousOperations||[];
    if(rev.length){const a=n(rev[rev.length-1]?.reportedValue),b=n(rev[rev.length-2]?.reportedValue);if(a!=null&&b)out.revenueGrowth=a/b-1;const income=n(ni[ni.length-1]?.reportedValue);if(a&&income!=null)out.profitMargin=income/a}
    const eps=rows.find(x=>x.annualDilutedEPS)?.annualDilutedEPS||[];if(eps.length>1){const a=n(eps[eps.length-1]?.reportedValue),b=n(eps[eps.length-2]?.reportedValue);if(a!=null&&b)out.earningsGrowth=a/b-1}
-   const qr=rows.find(x=>x.quarterlyTotalRevenue)?.quarterlyTotalRevenue||[],qo=rows.find(x=>x.quarterlyOperatingIncome)?.quarterlyOperatingIncome||[]; const qv=qr.map(x=>n(x.reportedValue)).filter(x=>x!=null),ov=qo.map(x=>n(x.reportedValue)).filter(x=>x!=null); if(qv.length){out.quarterRevenue=qv[qv.length-1];if(qv.length>=5&&qv[qv.length-5])out.quarterRevenueGrowth=qv[qv.length-1]/qv[qv.length-5]-1} if(ov.length){out.quarterOperatingIncome=ov[ov.length-1];if(ov.length>=5&&ov[ov.length-5])out.quarterOperatingIncomeGrowth=ov[ov.length-1]/ov[ov.length-5]-1}
+   const qr=rows.find(x=>x.quarterlyTotalRevenue)?.quarterlyTotalRevenue||[],qo=rows.find(x=>x.quarterlyOperatingIncome)?.quarterlyOperatingIncome||[];
+   const revenue=quarterSnapshot(qr),operating=quarterSnapshot(qo);
+   out.quarterRevenue=revenue.value;out.quarterRevenueGrowth=revenue.growth;
+   out.quarterOperatingIncome=operating.value;out.quarterOperatingIncomeGrowth=operating.growth;
    const qrCurrency=currencyOf(qr),qoCurrency=currencyOf(qo);
    // The stock's trading currency is not necessarily its financial reporting currency.
    // Never silently treat EUR/USD reports as JPY or use a fabricated FX rate.
@@ -44,8 +68,8 @@ export default async function handler(req,res){
     const conversion=await currencyToJPY(reportingCurrency);
     if(conversion){
      out.quarterFxRateJPY=conversion.rate;out.quarterFxDate=conversion.date;
-     if(qv.length&&(!qrCurrency||qrCurrency===reportingCurrency))out.quarterRevenueJPY=out.quarterRevenue*conversion.rate;
-     if(ov.length&&(!qoCurrency||qoCurrency===reportingCurrency))out.quarterOperatingIncomeJPY=out.quarterOperatingIncome*conversion.rate;
+     if(out.quarterRevenue!==null&&(!qrCurrency||qrCurrency===reportingCurrency))out.quarterRevenueJPY=out.quarterRevenue*conversion.rate;
+     if(out.quarterOperatingIncome!==null&&(!qoCurrency||qoCurrency===reportingCurrency))out.quarterOperatingIncomeJPY=out.quarterOperatingIncome*conversion.rate;
     }
    }
    if(Object.values(out).some(v=>v!=null&&!Array.isArray(v)))out.source.push("Yahoo fundamentals timeseries");

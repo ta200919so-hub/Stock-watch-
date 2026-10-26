@@ -217,6 +217,7 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         assert.equal(await page.locator(".global-result").count(),1,
           "available-market results must remain visible despite the other market failing");
         assert.doesNotMatch(await page.locator("#globalSuggestions").innerText(),/候補が見つかりません/);
+        await page.screenshot({path:resolve(screenshots,"search-partial-outage-390.png")});
         await page.locator("#globalSearch").fill("全市場障害");
         await page.waitForFunction(()=>document.querySelector("#globalSuggestions")?.textContent?.includes("日本株・米国株の検索に失敗しました"));
         assert.equal(await page.locator(".global-result").count(),0,
@@ -224,6 +225,7 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         assert.doesNotMatch(await page.locator("#globalSuggestions").innerText(),/候補が見つかりません/);
         assert.equal(await page.evaluate(()=>localStorage.getItem("stock-watch-ai-v1")),null,
           "search failures must not create or overwrite portfolio data");
+        await page.screenshot({path:resolve(screenshots,"search-total-outage-390.png")});
       }finally{await context.close()}
     });
     await t.test("yen financial refresh preserves the selected chart and portfolio",async()=>{

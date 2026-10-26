@@ -1,5 +1,5 @@
 async function chart(symbol) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
 
   const r = await fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0" }
@@ -22,7 +22,9 @@ export default async function handler(req, res) {
   try {
     const meta = await chart(symbol);
     const raw = Number(meta?.regularMarketPrice);
-    const previous = Number(meta?.chartPreviousClose || meta?.previousClose || 0);
+    // A one-day chart makes chartPreviousClose a prior-session close.
+    // Prefer previousClose when Yahoo provides both values.
+    const previous = Number(meta?.previousClose || meta?.chartPreviousClose);
     const prev = Number.isFinite(previous) && previous > 0 ? previous : null;
     const expectedCurrency = market === "US" ? "USD" : "JPY";
     // A valid price in the wrong currency would silently corrupt yen valuations.

@@ -10,7 +10,7 @@ function response(){
     setHeader(key,value){this.headers[key]=value},
     json(body){this.body=body;return this}};
 }
-async function quote({symbol="7203.T",market="JP",stock={regularMarketPrice:3000,chartPreviousClose:2900,currency:"JPY"},fx={regularMarketPrice:150,currency:"JPY"}}={}){
+async function quote({symbol="7203.T",market="JP",stock={regularMarketPrice:3000,previousClose:2900,currency:"JPY"},fx={regularMarketPrice:150,currency:"JPY"}}={}){
   const requested=[];
   const fetch=async url=>{
     requested.push(url);
@@ -31,7 +31,7 @@ test("JPY quote remains in yen without fetching FX",async()=>{
 });
 test("USD quote converts only with a valid JPY FX rate",async()=>{
   const {res,requested}=await quote({symbol:"amat",market:"US",
-    stock:{regularMarketPrice:200,chartPreviousClose:190,currency:"USD"}});
+    stock:{regularMarketPrice:200,previousClose:190,currency:"USD"}});
   assert.equal(res.code,200);
   assert.equal(res.body.symbol,"AMAT");
   assert.equal(res.body.priceJPY,30000);
@@ -59,6 +59,19 @@ test("invalid stock and FX numbers are rejected rather than serialized as null",
     fx:{regularMarketPrice:150,currency:"USD"}});
   assert.equal(res.code,502,"FX currency must be JPY");
 });
+test("daily change uses previousClose even when multi-day chart baseline differs",async()=>{
+  const {res}=await quote({stock:{regularMarketPrice:110,previousClose:100,chartPreviousClose:80,currency:"JPY"}});
+  assert.equal(res.code,200);
+  assert.equal(res.body.previousClose,100);
+  assert.ok(Math.abs(res.body.dayChangePct-10)<1e-10);
+});
+test("one-day chart uses chartPreviousClose when previousClose is absent",async()=>{
+  const {res,requested}=await quote({stock:{regularMarketPrice:110,chartPreviousClose:100,currency:"JPY"}});
+  assert.equal(res.code,200);
+  assert.equal(res.body.previousClose,100);
+  assert.ok(Math.abs(res.body.dayChangePct-10)<1e-10);
+  assert.ok(requested[0].includes("range=1d"),"daily quote must not use a multi-day baseline");
+});
 test("invalid market or symbol is rejected before an upstream request",async()=>{
   for(const input of [{market:"EUR"},{symbol:"../../foo"},{symbol:""}]){
     const {res,requested}=await quote(input);
@@ -67,7 +80,7 @@ test("invalid market or symbol is rejected before an upstream request",async()=>
   }
 });
 test("invalid previous close does not produce bogus day change",async()=>{
-  const {res}=await quote({stock:{regularMarketPrice:100,chartPreviousClose:-1,currency:"JPY"}});
+  const {res}=await quote({stock:{regularMarketPrice:100,previousClose:-1,currency:"JPY"}});
   assert.equal(res.code,200);
   assert.equal(res.body.previousClose,null);
   assert.equal(res.body.dayChangePct,null);

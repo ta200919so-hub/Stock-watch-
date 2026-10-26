@@ -428,6 +428,12 @@ test("mobile viewport, chart, search and isolated portfolio recovery",async t=>{
         const rect=await button.boundingBox();
         assert.ok(rect&&rect.x>=0&&rect.x+rect.width<=320,
           "restore button must fit a 320px iPhone viewport");
+        const overlap=await page.evaluate(()=>{
+          const restore=document.querySelector("#restoreBackup").getBoundingClientRect();
+          const add=document.querySelector("#openAdd").getBoundingClientRect();
+          return restore.left<add.right&&add.left<restore.right&&restore.top<add.bottom&&add.top<restore.bottom;
+        });
+        assert.equal(overlap,false,"restore button must not be covered by the sticky add action at 320px");
         const previousBackup=await page.evaluate(()=>localStorage.getItem("stock-watch-ai-backup-v1"));
         page.once("dialog",dialog=>dialog.dismiss());
         await button.click();

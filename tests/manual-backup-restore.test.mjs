@@ -80,6 +80,7 @@ test("recovery button and PWA asset revisions stay linked",()=>{
  assert.match(html,/id="restoreBackup"/);
  assert.match(source,/restorePortfolioBackup\(\)/);
  assert.match(sw,/const CACHE="stock-watch-ai-v[0-9]+-[0-9]+";/);
- assert.match(html,/app\.js\?v=4\.41/);
- assert.match(sw,/app\.js\?v=4\.41/);
+ const appVersion=html.match(/app\.js\?v=([0-9.]+)/)?.[1];
+ assert.ok(appVersion,"app.js asset revision missing from HTML");
+ assert.ok(sw.includes(`app.js?v=${appVersion}`),"service worker must precache the matching app.js revision");
 });

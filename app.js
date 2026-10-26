@@ -23,7 +23,7 @@ function safeNewsUrl(value){
 }
 const safeNewsImpact=value=>value==="positive"?"positive":value==="negative"?"negative":"neutral";
 // News from old localStorage snapshots or external APIs may contain non-article values.
-const usableNewsItems=value=>Array.isArray(value)?value.filter(n=>n&&typeof n==="object"&&!Array.isArray(n)):[];
+const usableNewsItems=value=>Array.isArray(value)?value.filter(n=>n&&typeof n==="object"&&!Array.isArray(n)&&typeof n.title==="string"&&n.title.trim().length>0):[];
 
 function migrate(s){
   if("purchasePriceJPY" in s) return s;

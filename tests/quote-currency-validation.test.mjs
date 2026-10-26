@@ -85,3 +85,20 @@ test("invalid previous close does not produce bogus day change",async()=>{
   assert.equal(res.body.previousClose,null);
   assert.equal(res.body.dayChangePct,null);
 });
+
+test("invalid previousClose falls back to valid chartPreviousClose",async()=>{
+  for(const invalid of [-1,0,NaN,Infinity,"bad",null,""]){
+    const {res}=await quote({stock:{regularMarketPrice:110,previousClose:invalid,chartPreviousClose:100,currency:"JPY"}});
+    assert.equal(res.code,200,String(invalid));
+    assert.equal(res.body.previousClose,100,String(invalid));
+    assert.ok(Math.abs(res.body.dayChangePct-10)<1e-10,String(invalid));
+  }
+});
+test("invalid or missing close values never generate fabricated day change",async()=>{
+  for(const close of [-1,0,NaN,Infinity,"bad",null,""]){
+    const {res}=await quote({stock:{regularMarketPrice:110,previousClose:close,chartPreviousClose:close,currency:"JPY"}});
+    assert.equal(res.code,200,String(close));
+    assert.equal(res.body.previousClose,null,String(close));
+    assert.equal(res.body.dayChangePct,null,String(close));
+  }
+});

@@ -151,3 +151,26 @@ test("quarterly YoY growth is omitted when latest metadata conflicts within an o
  const {body}=await run([entry("2025-03-31",100,"EUR"),latest]);
  assert.equal(body.quarterRevenueGrowth,null);
 });
+
+test("empty quarterly data does not fabricate reporting currency, FX, or a timeseries source",async()=>{
+ const {body,requests}=await run([],[]);
+ assert.equal(body.quarterRevenue,null);
+ assert.equal(body.quarterOperatingIncome,null);
+ assert.equal(body.quarterFinancialCurrency,null);
+ assert.equal(body.quarterFxRateJPY,null);
+ assert.equal(body.quarterRevenueJPY,null);
+ assert.equal(body.quarterOperatingIncomeJPY,null);
+ assert.equal(body.unavailable,true);
+ assert.equal(body.source.includes("Yahoo fundamentals timeseries"),false);
+ assert.equal(requests.some(url=>url.includes("EURJPY")||url.includes("USDJPY")),false);
+});
+
+test("operating-income-only quarterly data still converts a declared currency",async()=>{
+ const {body}=await run([], [entry("2026-03-31",20,"EUR")]);
+ assert.equal(body.quarterRevenue,null);
+ assert.equal(body.quarterOperatingIncome,20);
+ assert.equal(body.quarterFinancialCurrency,"EUR");
+ assert.equal(body.quarterFxRateJPY,180);
+ assert.equal(body.quarterOperatingIncomeJPY,3600);
+ assert.equal(body.unavailable,false);
+});

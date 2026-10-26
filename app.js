@@ -361,11 +361,27 @@ async function refreshOne(s){
   await Promise.all([
     (async()=>{try{
       const fr=await fetchTimeout(`/api/fundamentals?symbol=${encodeURIComponent(s.symbol)}&market=${s.market}`);
-      if(fr.ok)s.fundamentals=await fr.json();
+      if(fr.ok){
+        const data=await fr.json();
+        // A malformed HTTP 200 payload must not erase previously saved metrics.
+        if(data&&typeof data==="object"&&!Array.isArray(data)&&
+          (typeof data.unavailable==="boolean"||Array.isArray(data.source)||
+           ["trailingPE","forwardPE","revenueGrowth","profitMargin","quarterRevenueJPY","quarterOperatingIncomeJPY"].some(key=>Number.isFinite(data[key])))){
+          s.fundamentals=data;
+        }
+      }
     }catch(e){}})(),
     (async()=>{try{
       const nr=await fetchTimeout(`/api/news?symbol=${encodeURIComponent(s.symbol)}`);
-      if(nr.ok){const nd=await nr.json();if(Array.isArray(nd?.items))s.news=usableNewsItems(nd.items)}
+      if(nr.ok){
+        const nd=await nr.json();
+        if(Array.isArray(nd?.items)){
+          const items=usableNewsItems(nd.items);
+          // A genuinely empty feed clears old news, but malformed nonempty
+          // payloads must not erase the last usable saved articles.
+          if(nd.items.length===0||items.length>0)s.news=items;
+        }
+      }
     }catch(e){}})()
   ]);
   s.updatedAt=Date.now();

@@ -40,7 +40,19 @@ function quarterSnapshot(entries){
  return {value:current.value,growth:previous?.value?current.value/previous.value-1:null};
 }
 async function fxJPY(){try{const meta=(await chart("JPY=X","5d"))?.meta;const rate=n(meta?.regularMarketPrice);return meta?.currency==="JPY"&&rate!==null&&rate>0?rate:null}catch{return null}}
-const currencyOf=(entries)=>{for(const x of entries){const c=x?.currencyCode||x?.currency||x?.reportedValue?.currencyCode;if(typeof c==="string"&&/^[A-Z]{3}$/.test(c))return c}return null};
+// A single quarterly series must not mix currencies: choosing the first
+// currency would convert the latest observation with an unrelated FX rate.
+function currencyInfoOf(entries){
+ const codes=new Set();
+ for(const entry of Array.isArray(entries)?entries:[]){
+  if(n(entry?.reportedValue)===null)continue;
+  const code=entry?.currencyCode??entry?.currency??entry?.reportedValue?.currencyCode;
+  if(code==null||code==="")continue;
+  if(typeof code!=="string"||!/^[A-Z]{3}$/.test(code))return {currency:null,conflict:true};
+  codes.add(code);
+ }
+ return {currency:codes.size===1?[...codes][0]:null,conflict:codes.size>1};
+}
 // ASML reports in EUR even when its NASDAQ-listed shares trade in USD.
 // Yahoo's fundamentals timeseries can omit the reporting-currency metadata.
 const knownReportingCurrencies={"ASML":"EUR","ASML.AS":"EUR"};
@@ -82,10 +94,11 @@ export default async function handler(req,res){
    const revenue=quarterSnapshot(qr),operating=quarterSnapshot(qo);
    out.quarterRevenue=revenue.value;out.quarterRevenueGrowth=revenue.growth;
    out.quarterOperatingIncome=operating.value;out.quarterOperatingIncomeGrowth=operating.growth;
-   const qrCurrency=currencyOf(qr),qoCurrency=currencyOf(qo);
+   const qrInfo=currencyInfoOf(qr),qoInfo=currencyInfoOf(qo);
+   const qrCurrency=qrInfo.currency,qoCurrency=qoInfo.currency;
    // The stock's trading currency is not necessarily its financial reporting currency.
    // Never silently treat EUR/USD reports as JPY or use a fabricated FX rate.
-   if(qrCurrency&&qoCurrency&&qrCurrency!==qoCurrency){out.quarterFinancialCurrency=null}
+   if(qrInfo.conflict||qoInfo.conflict||(qrCurrency&&qoCurrency&&qrCurrency!==qoCurrency)){out.quarterFinancialCurrency=null}
    else{
     const reportingCurrency=qrCurrency||qoCurrency||reportingCurrencyFor(symbol,market);
     out.quarterFinancialCurrency=reportingCurrency;

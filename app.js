@@ -372,8 +372,9 @@ async function refreshOne(s){
             "quarterOperatingIncome","quarterRevenueJPY","quarterOperatingIncomeJPY",
             "quarterRevenueGrowth","quarterOperatingIncomeGrowth","earningsSurprisePct"]
             .some(key=>Number.isFinite(data[key]));
-          if(hasMetrics)s.fundamentals=data;
-          else if(data.unavailable===true&&!s.fundamentals)s.fundamentals=data;
+          if(data.unavailable===true){
+            if(!s.fundamentals)s.fundamentals=data;
+          }else if(hasMetrics)s.fundamentals=data;
         }
       }
     }catch(e){}})(),

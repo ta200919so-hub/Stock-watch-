@@ -17,9 +17,10 @@ async function run(holdingData,{fundamentals,news}){
   const fetchTimeout=async url=>url.startsWith("/api/quote")?
     reply({priceJPY:120,dayChangePct:2}):
     url.startsWith("/api/fundamentals")?reply(fundamentals):reply(news);
-  const context=vm.createContext({fetchTimeout,Number,Date,Promise,Array,
-    usableNewsItems:value=>Array.isArray(value)?
-      value.filter(n=>n&&typeof n==="object"&&!Array.isArray(n)):[]});
+  // Exercise the production news validator rather than a looser test-only stub.
+  const helperLine=source.split("\n").find(line=>line.startsWith("const usableNewsItems="));
+  const usableNewsItems=vm.runInNewContext(helperLine+"\nusableNewsItems",{Array});
+  const context=vm.createContext({fetchTimeout,Number,Date,Promise,Array,usableNewsItems});
   const refreshOne=vm.runInContext(refreshCode+"\nrefreshOne",context);
   await refreshOne(holdingData);
 }
@@ -70,4 +71,15 @@ test("unavailable partial fundamentals do not replace previously saved complete 
   await run(s,{fundamentals:{unavailable:true,quarterRevenueJPY:100000,source:[]},news:{items:[],unavailable:true}});
   assert.equal(s.fundamentals,oldFundamentals);
   assert.equal(s.fundamentals.trailingPE,22);
+});
+
+test("malformed HTTP 200 news articles do not erase saved headlines",async()=>{
+  const s=holding(),previous=s.news;
+  await run(s,{fundamentals:{unavailable:true},news:{items:[{},null,{title:""},{title:"   "},{title:42}]}});
+  assert.equal(s.news,previous,"all-invalid news feed must retain existing saved articles");
+});
+test("mixed valid and malformed news articles keep only usable headlines",async()=>{
+  const s=holding();
+  await run(s,{fundamentals:{unavailable:true},news:{items:[{},{"title":"Fresh update"},{title:"   "},null]}});
+  assert.deepEqual(s.news.map(item=>item.title),["Fresh update"]);
 });

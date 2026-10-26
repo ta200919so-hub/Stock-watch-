@@ -22,6 +22,8 @@ function safeNewsUrl(value){
   }catch{return "#"}
 }
 const safeNewsImpact=value=>value==="positive"?"positive":value==="negative"?"negative":"neutral";
+// News from old localStorage snapshots or external APIs may contain non-article values.
+const usableNewsItems=value=>Array.isArray(value)?value.filter(n=>n&&typeof n==="object"&&!Array.isArray(n)):[];
 
 function migrate(s){
   if("purchasePriceJPY" in s) return s;
@@ -151,7 +153,7 @@ function portfolioWeight(s){
 }
 function decision(s){
   const base=stockScore(s);if(base===null)return {label:"データ待ち",kind:"neutral",score:null,reasons:["株価と保有情報を更新してください。"]};
-  let score=base,reasons=[];const f=s.fundamentals||{},news=s.news||[];
+  let score=base,reasons=[];const f=s.fundamentals||{},news=usableNewsItems(s.news);
   const weight=portfolioWeight(s);
   const pos=news.filter(n=>n.impact==="positive").length,neg=news.filter(n=>n.impact==="negative").length;
   if(pos>neg){score+=5;reasons.push("直近ニュースは好材料が優勢");}else if(neg>pos){score-=7;reasons.push("直近ニュースは悪材料が優勢");}
@@ -165,7 +167,7 @@ function decision(s){
   return {label,kind,score,reasons:reasons.slice(0,3)};
 }
 function autoComment(s){
- const d=Number.isFinite(s.dayChangePct)?s.dayChangePct:null,f=s.fundamentals||{},news=s.news||[],name=displayName(s),sector=SECTORS[s.symbol]||"事業";
+ const d=Number.isFinite(s.dayChangePct)?s.dayChangePct:null,f=s.fundamentals||{},news=usableNewsItems(s.news),name=displayName(s),sector=SECTORS[s.symbol]||"事業";
  const pos=news.filter(n=>n.impact==="positive"),neg=news.filter(n=>n.impact==="negative");let score=50,evidence=[],drivers=[];
  if(Number.isFinite(f.revenueGrowth)){score+=f.revenueGrowth>0.1?12:f.revenueGrowth<0?-12:3;evidence.push(`売上 ${f.revenueGrowth>=0?"+":""}${(f.revenueGrowth*100).toFixed(1)}%`);drivers.push(f.revenueGrowth>0?`売上が前年比${(f.revenueGrowth*100).toFixed(1)}%伸びている`:`売上が前年比${Math.abs(f.revenueGrowth*100).toFixed(1)}%減っている`)}
  if(Number.isFinite(f.earningsGrowth)){score+=f.earningsGrowth>0.1?12:f.earningsGrowth<0?-12:2;evidence.push(`利益 ${f.earningsGrowth>=0?"+":""}${(f.earningsGrowth*100).toFixed(1)}%`);drivers.push(f.earningsGrowth>0?"利益成長が売上の伸びを支えている":"利益成長が弱く採算の確認が必要")}
@@ -183,7 +185,7 @@ function autoComment(s){
  return {view,score,short,base,bull,bear,change,evidence:evidence.slice(0,5),quality};
 }
 function focusScore(s){
-  let score=0,reasons=[];const d=Number.isFinite(s.dayChangePct)?s.dayChangePct:0,dec=decision(s),news=s.news||[];
+  let score=0,reasons=[];const d=Number.isFinite(s.dayChangePct)?s.dayChangePct:0,dec=decision(s),news=usableNewsItems(s.news);
   const weight=portfolioWeight(s);
   if(Math.abs(d)>=3){score+=25+Math.min(15,Math.abs(d)*2);reasons.push(`前日比 ${d>=0?"+":""}${d.toFixed(1)}% と値動き大`);}
   const neg=news.filter(n=>n.impact==="negative").length,pos=news.filter(n=>n.impact==="positive").length;
@@ -211,7 +213,7 @@ function renderDetail(i){
   detailFromSearch=false;
   const s=stocks[i];if(!s)return;const c=autoComment(s),dec=decision(s),f=s.fundamentals||{};
   // Older saved records and malformed upstream responses must not break detail rendering.
-  const newsItems=Array.isArray(s.news)?s.news.filter(n=>n&&typeof n==="object"&&!Array.isArray(n)):[];
+  const newsItems=usableNewsItems(s.news);
   $("#detailTitle").textContent=displayName(s);$("#detailPrice").textContent=s.currentPriceJPY?yen(s.currentPriceJPY):"—";
   $("#detailBody").innerHTML=`
     <div class="decision ${dec.kind}"><div><span>総合判定</span><strong>${escapeHtml(dec.label)}</strong></div><p>${dec.reasons.map(escapeHtml).join(" ・ ")}</p></div>
@@ -332,7 +334,7 @@ async function refreshOne(s){
     }catch(e){}})(),
     (async()=>{try{
       const nr=await fetchTimeout(`/api/news?symbol=${encodeURIComponent(s.symbol)}`);
-      if(nr.ok){const nd=await nr.json();if(Array.isArray(nd?.items))s.news=nd.items.filter(n=>n&&typeof n==="object"&&!Array.isArray(n))}
+      if(nr.ok){const nd=await nr.json();if(Array.isArray(nd?.items))s.news=usableNewsItems(nd.items)}
     }catch(e){}})()
   ]);
   s.updatedAt=Date.now();

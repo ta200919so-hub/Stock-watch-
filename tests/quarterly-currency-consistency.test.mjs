@@ -89,3 +89,25 @@ test("fully unlabeled Japanese quarterly series retain JPY market fallback",asyn
  assert.equal(body.quarterRevenueJPY,150);
  assert.equal(body.quarterOperatingIncomeJPY,20);
 });
+
+test("latest unlabeled quarter cannot inherit an older EUR reporting currency",async()=>{
+ const {body,requests}=await run([
+  entry("2026-03-31",150),
+  entry("2025-03-31",100,"EUR")
+ ]);
+ assert.equal(body.quarterRevenue,150);
+ assert.equal(body.quarterFinancialCurrency,null);
+ assert.equal(body.quarterFxRateJPY,null);
+ assert.equal(body.quarterRevenueJPY,null);
+ assert.equal(requests.some(url=>url.includes("EURJPY")),false);
+});
+
+test("latest dated EUR quarter can convert despite an older unlabeled observation",async()=>{
+ const {body}=await run([
+  entry("2025-03-31",100),
+  entry("2026-03-31",150,"EUR")
+ ]);
+ assert.equal(body.quarterRevenue,150);
+ assert.equal(body.quarterFinancialCurrency,"EUR");
+ assert.equal(body.quarterRevenueJPY,27000);
+});

@@ -364,10 +364,16 @@ async function refreshOne(s){
       if(fr.ok){
         const data=await fr.json();
         // A malformed HTTP 200 payload must not erase previously saved metrics.
-        if(data&&typeof data==="object"&&!Array.isArray(data)&&
-          (typeof data.unavailable==="boolean"||Array.isArray(data.source)||
-           ["trailingPE","forwardPE","revenueGrowth","profitMargin","quarterRevenueJPY","quarterOperatingIncomeJPY"].some(key=>Number.isFinite(data[key])))){
-          s.fundamentals=data;
+        if(data&&typeof data==="object"&&!Array.isArray(data)){
+          // Yahoo may return HTTP 200 with unavailable:true and null metrics.
+          // Keep last-known valid analysis instead of replacing it with an outage.
+          const hasMetrics=["trailingPE","forwardPE","marketCap","profitMargin",
+            "revenueGrowth","earningsGrowth","targetMeanPrice","quarterRevenue",
+            "quarterOperatingIncome","quarterRevenueJPY","quarterOperatingIncomeJPY",
+            "quarterRevenueGrowth","quarterOperatingIncomeGrowth","earningsSurprisePct"]
+            .some(key=>Number.isFinite(data[key]));
+          if(hasMetrics)s.fundamentals=data;
+          else if(data.unavailable===true&&!s.fundamentals)s.fundamentals=data;
         }
       }
     }catch(e){}})(),
@@ -379,7 +385,7 @@ async function refreshOne(s){
           const items=usableNewsItems(nd.items);
           // A genuinely empty feed clears old news, but malformed nonempty
           // payloads must not erase the last usable saved articles.
-          if(nd.items.length===0||items.length>0)s.news=items;
+          if(nd.unavailable!==true&&(nd.items.length===0||items.length>0))s.news=items;
         }
       }
     }catch(e){}})()
